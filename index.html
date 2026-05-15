@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gastos — Sebastián</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0D0D0D;--bg2:#141414;--bg3:#1C1C1C;--bg4:#242424;
+  --border:#252525;--border2:#2E2E2E;
+  --text:#E2E2E2;--text2:#8A8A8A;--text3:#505050;
+  --green:#4ADE80;--gdim:rgba(74,222,128,.12);
+  --red:#F87171;--rdim:rgba(248,113,113,.12);
+  --blue:#60A5FA;--bdim:rgba(96,165,250,.12);
+  --amber:#FBBF24;--adim:rgba(251,191,36,.12);
+  --purple:#C084FC;--pdim:rgba(192,132,252,.12);
+  --teal:#2DD4BF;--tdim:rgba(45,212,191,.12);
+  --font:'DM Sans',sans-serif;--mono:'DM Mono',monospace;
+}
+body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:13px}
+.topbar{height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;border-bottom:1px solid var(--border);background:var(--bg);position:sticky;top:0;z-index:50}
+.logo{font-family:var(--mono);font-size:13px;font-weight:500;letter-spacing:-.02em}
+.logo em{color:var(--green);font-style:normal}
+.tabs-top{display:flex;gap:2px;background:var(--bg3);border-radius:8px;padding:3px}
+.ttab{padding:5px 16px;border-radius:6px;font-size:12px;font-weight:500;color:var(--text2);cursor:pointer;border:none;background:none;font-family:var(--font);transition:all .15s}
+.ttab.on{background:var(--bg4);color:var(--text)}
+.top-r{display:flex;align-items:center;gap:8px}
+select.ctl{background:var(--bg3);border:1px solid var(--border2);border-radius:7px;padding:5px 10px;font-size:12px;color:var(--text);font-family:var(--font);cursor:pointer;outline:none}
+.main{padding:20px 24px;max-width:1400px;margin:0 auto}
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px;position:relative;overflow:hidden}
+.card-acc{position:absolute;top:0;left:0;right:0;height:2px}
+.card-lbl{font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:8px}
+.card-val{font-size:24px;font-weight:600;font-family:var(--mono);line-height:1;margin-bottom:5px}
+.card-sub{font-size:11px;color:var(--text3);line-height:1.5}
+.card-delta{font-size:11px;font-family:var(--mono);margin-top:4px}
+.vg{color:var(--green)}.vr{color:var(--red)}.vb{color:var(--blue)}.va{color:var(--amber)}.vp{color:var(--purple)}.vt{color:var(--teal)}
+.sec{background:var(--bg2);border:1px solid var(--border);border-radius:12px;margin-bottom:14px;overflow:hidden}
+.sec-head{padding:13px 18px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none}
+.sec-head:hover{background:rgba(255,255,255,.02)}
+.sec-title{font-size:11px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--text3)}
+.sec-meta{font-size:11px;font-family:var(--mono);color:var(--text3);margin-top:2px}
+.sec-toggle{font-size:11px;color:var(--text3)}
+.sec-body{display:none;border-top:1px solid var(--border)}
+.sec-body.open{display:block}
+.chart-layout{display:grid;grid-template-columns:160px 1fr;gap:0}
+.legend-panel{padding:16px 12px;border-right:1px solid var(--border);overflow-y:auto;max-height:280px}
+.leg-item{display:flex;align-items:center;gap:7px;padding:4px 6px;border-radius:6px;cursor:pointer;user-select:none;margin-bottom:2px;transition:opacity .15s}
+.leg-item:hover{background:var(--bg3)}
+.leg-item.off{opacity:.3}
+.leg-dot{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+.leg-label{font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chart-area{padding:16px;min-height:252px}
+.chart-wrap{position:relative;height:220px}
+.deptos-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+.dep-card{background:var(--bg3);border-radius:10px;padding:13px;border:1px solid var(--border)}
+.dep-name{font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:10px}
+.dep-row{display:flex;justify-content:space-between;font-size:12px;padding:3px 0}
+.dep-row .lbl{color:var(--text2)}
+.dep-row.tot{border-top:1px solid var(--border2);margin-top:5px;padding-top:7px;font-weight:500}
+.dep-row.tot .lbl{color:var(--text)}
+.dep-note{font-size:10px;color:var(--text3);margin-top:4px;font-style:italic}
+.inv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;padding:16px 18px 0}
+.inv-ent{background:var(--bg3);border-radius:8px;padding:10px 12px;border:1px solid var(--border)}
+.inv-ent-name{font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:6px}
+.inv-ent-ap{font-size:13px;font-weight:500;color:var(--blue)}
+.inv-ent-re{font-size:11px;color:var(--green);margin-top:2px}
+.pnl-controls{display:flex;gap:8px;padding:12px 18px;border-bottom:1px solid var(--border);align-items:center}
+.pnl-controls label{font-size:12px;color:var(--text2)}
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12px}
+thead th{font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--text3);padding:8px 14px;border-bottom:1px solid var(--border);text-align:right;font-weight:400;white-space:nowrap;background:var(--bg2);position:sticky;top:52px;z-index:2}
+thead th:first-child{text-align:left;position:sticky;left:0;z-index:3;background:var(--bg2)}
+tbody td{padding:6px 14px;border-bottom:1px solid var(--border);text-align:right;color:var(--text2);font-family:var(--mono);white-space:nowrap}
+tbody td:first-child{text-align:left;color:var(--text);font-family:var(--font);position:sticky;left:0;background:var(--bg2);min-width:160px}
+tbody tr:hover td{background:var(--bg3)}
+tbody tr:hover td:first-child{background:var(--bg3)}
+.tr-s td{background:var(--bg3)!important;color:var(--text3)!important;font-size:10px!important;font-family:var(--mono)!important;text-transform:uppercase;letter-spacing:.06em;padding:5px 14px!important}
+.tr-sub td:first-child{padding-left:24px!important;font-size:11px!important;color:var(--text2)!important}
+.tr-tot td{border-top:1px solid var(--border2)!important;font-weight:600;font-size:13px!important}
+.tr-tot td:first-child{color:var(--text)!important}
+.neg{color:var(--red)}.pos{color:var(--green)}.neu{color:var(--text3)}.warn{color:var(--amber)}
+.hist-ctrls{display:flex;gap:8px;padding:12px 18px;border-bottom:1px solid var(--border);flex-wrap:wrap;align-items:center}
+.hist-ctrls input{background:var(--bg3);border:1px solid var(--border2);border-radius:7px;padding:5px 10px;font-size:12px;color:var(--text);font-family:var(--font);outline:none;flex:1;min-width:150px}
+.hist-wrap{max-height:420px;overflow-y:auto}
+.badge{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:500;font-family:var(--mono)}
+.bt-gasto{background:var(--rdim);color:var(--red)}.bt-ingreso{background:var(--gdim);color:var(--green)}
+.bt-inversion{background:var(--bdim);color:var(--blue)}.bt-devolucion{background:var(--adim);color:var(--amber)}
+.bt-transferencia_interna{background:var(--bg4);color:var(--text3)}
+.bt-p{background:var(--pdim);color:var(--purple)}.bt-c{background:var(--bdim);color:var(--blue)}
+.ebtn{background:none;border:none;color:var(--text3);cursor:pointer;padding:3px 7px;border-radius:5px;font-size:12px}
+.ebtn:hover{background:var(--bg4);color:var(--text)}
+.dl-btn{background:var(--bg3);border:1px solid var(--border2);border-radius:7px;padding:5px 12px;font-size:12px;color:var(--text2);cursor:pointer;font-family:var(--font)}
+.dl-btn:hover{background:var(--bg4)}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:200;display:none;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+.overlay.show{display:flex}
+.modal{background:var(--bg2);border:1px solid var(--border2);border-radius:16px;padding:24px;width:440px;max-width:95vw}
+.modal h3{font-size:15px;font-weight:500;margin-bottom:18px}
+.frow{margin-bottom:12px}
+.frow label{display:block;font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:5px}
+.frow input,.frow select{width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--text);font-family:var(--font);outline:none}
+.frow input:focus,.frow select:focus{border-color:var(--blue)}
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mbtns{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
+.btn{padding:8px 18px;border-radius:8px;font-size:13px;cursor:pointer;font-family:var(--font);border:none;font-weight:500}
+.btn-g{background:var(--bg3);color:var(--text2)}.btn-s{background:var(--green);color:#000}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+@media(max-width:900px){
+  .cards{grid-template-columns:1fr 1fr}
+  .chart-layout{grid-template-columns:1fr}
+  .legend-panel{border-right:none;border-bottom:1px solid var(--border);max-height:100px;display:flex;flex-wrap:wrap;gap:3px;padding:8px}
+  .deptos-grid{grid-template-columns:1fr 1fr}
+  .main{padding:12px 14px}
+  .topbar{padding:0 14px}
+}
+
+/* interactividad */
+
+.expand-btn { transition: color .15s; }
+.expand-btn:hover { color: var(--blue) !important; }
+td.clickable { cursor: pointer; }
+td.clickable:hover { background: rgba(96,165,250,.12) !important; }
+td.active-cell { background: rgba(96,165,250,.2) !important; outline: 1px solid var(--blue); }
+
+.tr-sub td, .tr-tot td { cursor: default; }
+.tr-sub td.clickable { cursor: pointer; transition: background .15s; }
+.tr-sub td.clickable:hover { background: rgba(96,165,250,.15) !important; }
+.tr-sub td.active-cell { background: rgba(96,165,250,.25) !important; outline: 1px solid var(--blue); }
+.tr-tot td.clickable-tot { cursor: pointer; }
+.tr-tot td.clickable-tot:hover { background: rgba(74,222,128,.1) !important; }
+.hist-filter-active { background: var(--bdim) !important; border-color: var(--blue) !important; }
+.filter-banner { display:none; align-items:center; gap:10px; padding:8px 18px;
+  background:var(--bdim); border-bottom:1px solid var(--blue);
+  font-size:12px; color:var(--blue); font-family:var(--mono); }
+.filter-banner.show { display:flex; }
+.filter-banner button { background:none; border:1px solid var(--blue); border-radius:5px;
+  color:var(--blue); padding:2px 10px; font-size:11px; cursor:pointer; font-family:var(--font); }
+.chart-clickable { cursor: crosshair; }
+
+/* ── CARGAR ── */
+.upload-zone{border:1px dashed var(--border2);border-radius:12px;padding:2rem;text-align:center;cursor:pointer;transition:border-color .2s;background:var(--bg2)}
+.upload-zone:hover{border-color:var(--blue)}
+.upload-zone input{display:none}
+.source-tabs{display:flex;gap:6px;margin-bottom:1rem}
+.stab{padding:6px 14px;border-radius:8px;font-size:12px;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);cursor:pointer;transition:all .15s}
+.stab.on{background:var(--blue);color:#000;border-color:var(--blue);font-weight:500}
+.pend-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;display:grid;grid-template-columns:100px 1fr auto;gap:10px;align-items:start;transition:border-color .2s}
+.pend-card:hover{border-color:var(--border2)}
+.pend-card.dup{border-color:var(--amber)}
+.pend-fecha{font-size:11px;font-family:var(--mono);color:var(--text3)}
+.pend-desc{font-size:12px;color:var(--text2);margin-bottom:6px;word-break:break-word}
+.pend-fields{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.pf{display:flex;flex-direction:column;gap:2px}
+.pf label{font-size:10px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:.05em}
+.pf select,.pf input{background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:4px 8px;font-size:12px;color:var(--text);font-family:var(--font);outline:none;min-width:120px}
+.pf select:focus,.pf input:focus{border-color:var(--blue)}
+.pend-monto{font-family:var(--mono);font-size:15px;font-weight:600;text-align:right;white-space:nowrap}
+.pend-actions{display:flex;flex-direction:column;gap:4px;align-items:flex-end}
+.abtn{padding:4px 12px;border-radius:6px;font-size:11px;cursor:pointer;border:none;font-family:var(--font);font-weight:500;transition:all .15s;white-space:nowrap}
+.abtn-ok{background:var(--green);color:#000}
+.abtn-del{background:var(--bg3);color:var(--text3);border:1px solid var(--border2)}
+.abtn-del:hover{background:var(--rdim);color:var(--red);border-color:var(--red)}
+.dup-badge{background:var(--adim);color:var(--amber);border-radius:4px;font-size:10px;padding:2px 7px;font-family:var(--mono);margin-bottom:4px}
+.confirm-bar{position:sticky;bottom:0;background:var(--bg);border-top:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;margin:0 -24px}
+.cxp-box{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:1rem;display:flex;gap:24px;align-items:center;flex-wrap:wrap}
+.cxp-item{font-size:13px;color:var(--text2)}
+.cxp-item strong{font-family:var(--mono);font-size:16px;font-weight:600}
+.cxp-pos{color:var(--green)}.cxp-neg{color:var(--red)}
+.section-label{font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:.5rem;margin-top:1.25rem}
+.dup-section{background:var(--adim);border:1px solid var(--amber);border-radius:10px;padding:12px 14px;margin-bottom:1rem}
+.dup-pair{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.dup-col{background:var(--bg2);border-radius:8px;padding:10px 12px;font-size:12px}
+.dup-col-lbl{font-size:10px;font-family:var(--mono);color:var(--text3);margin-bottom:4px}
+.proceso-status{font-size:12px;color:var(--text2);padding:8px 0;display:flex;align-items:center;gap:8px}
+.spinner{width:14px;height:14px;border:2px solid var(--border2);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Gestor de conceptos */
+.gest-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:300;display:none;align-items:flex-start;justify-content:center;padding-top:40px;backdrop-filter:blur(4px)}
+.gest-overlay.show{display:flex}
+.gest-modal{background:var(--bg2);border:1px solid var(--border2);border-radius:16px;width:700px;max-width:95vw;max-height:80vh;display:flex;flex-direction:column}
+.gest-head{padding:18px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.gest-head h3{font-size:15px;font-weight:500}
+.gest-tabs{display:flex;gap:4px;background:var(--bg3);border-radius:7px;padding:3px;flex-shrink:0;margin:12px 20px 0}
+.gtab{padding:5px 14px;border-radius:5px;font-size:12px;font-weight:500;color:var(--text2);cursor:pointer;border:none;background:none;font-family:var(--font)}
+.gtab.on{background:var(--bg4);color:var(--text)}
+.gest-body{flex:1;overflow-y:auto;padding:16px 20px}
+.gest-planilla{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.gest-col{background:var(--bg3);border-radius:10px;padding:12px}
+.gest-col-title{font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:10px}
+.gest-item{display:flex;align-items:center;justify-content:space-between;padding:5px 8px;border-radius:6px;margin-bottom:3px;cursor:pointer;transition:background .15s}
+.gest-item:hover{background:var(--bg4)}
+.gest-item.selected{background:var(--bdim);border:1px solid var(--blue)}
+.gest-item-name{font-size:12px;color:var(--text)}
+.gest-item-count{font-size:10px;color:var(--text3);font-family:var(--mono)}
+.gest-actions{display:flex;gap:6px;margin-top:10px}
+.gest-input{background:var(--bg2);border:1px solid var(--border2);border-radius:7px;padding:6px 10px;font-size:12px;color:var(--text);font-family:var(--font);outline:none;flex:1}
+.gest-input:focus{border-color:var(--blue)}
+.gbtn{padding:5px 12px;border-radius:6px;font-size:11px;cursor:pointer;border:none;font-family:var(--font);font-weight:500}
+.gbtn-add{background:var(--green);color:#000}
+.gbtn-ren{background:var(--blue);color:#000}
+.gbtn-del{background:var(--rdim);color:var(--red);border:1px solid var(--red)}
+.gest-warning{font-size:11px;color:var(--amber);margin-top:6px;padding:6px 8px;background:var(--adim);border-radius:5px;display:none}
+.drag-handle{cursor:grab;color:var(--text3);font-size:14px;margin-right:6px;user-select:none}
+.drag-handle:active{cursor:grabbing}
+
+/* row move */
+.move-btns { display:inline-flex; flex-direction:column; gap:0; margin-left:5px; vertical-align:middle; opacity:0; transition:opacity .15s; }
+tr:hover .move-btns { opacity:1; }
+.move-btns button { background:none; border:none; color:var(--text3); cursor:pointer; font-size:8px; line-height:1.2; padding:0 2px; display:block; }
+.move-btns button:hover { color:var(--blue); }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="logo">gastos<em>_</em>app</div>
+  <div class="tabs-top">
+    <button class="ttab on" onclick="swP('personal',this)">Personal</button>
+    <button class="ttab" onclick="swP('casa',this)">Casa</button>
+    <button class="ttab" onclick="swP('cargar',this)" id="tab-cargar">
+      Cargar
+      <span id="badge-pend" style="display:none;background:#F87171;color:#000;border-radius:8px;font-size:10px;padding:1px 6px;margin-left:4px">0</span>
+    </button>
+  </div>
+  <div class="top-r" style="display:flex;align-items:center;gap:8px">
+    <button class="ctl" onclick="openGest()" style="cursor:pointer" title="Gestionar conceptos e ítems">⚙ Conceptos</button>
+    <select class="ctl" id="sel-periodo" onchange="updPeriodo()" title="Rango de meses a mostrar en gráficos y P&L">
+      <option value="6">6 meses</option>
+      <option value="12">12 meses</option>
+      <option value="18" selected>18 meses</option>
+      <option value="999">Todos</option>
+    </select>
+    <select class="ctl" id="sel-mes" onchange="upd()"></select>
+  </div>
+</div>
+
+<div class="main">
+  <div class="cards" id="cards"></div>
+
+  <!-- ══ PERSONAL ══ -->
+  <div id="vista-personal">
+
+  <div class="sec">
+    <div class="sec-head" onclick="togS('ing')">
+      <div><div class="sec-title">Ingresos</div><div class="sec-meta" id="meta-ing"></div></div>
+      <span class="sec-toggle" id="tog-ing">▶</span>
+    </div>
+    <div class="sec-body" id="sec-ing">
+      <div class="chart-area"><div class="chart-wrap"><canvas id="c-ing"></canvas></div></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-head" onclick="togS('gop')">
+      <div><div class="sec-title">Gastos operacionales — 18m</div><div class="sec-meta" id="meta-gop"></div></div>
+      <span class="sec-toggle" id="tog-gop">▼</span>
+    </div>
+    <div class="sec-body open" id="sec-gop">
+      <div class="chart-layout">
+        <div class="legend-panel" id="leg-gop"></div>
+        <div class="chart-area"><div class="chart-wrap"><canvas id="c-gop"></canvas></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-head" onclick="togS('extr')">
+      <div><div class="sec-title">Extraordinarios</div><div class="sec-meta" id="meta-extr"></div></div>
+      <span class="sec-toggle" id="tog-extr">▼</span>
+    </div>
+    <div class="sec-body open" id="sec-extr">
+      <div class="chart-area"><div class="chart-wrap"><canvas id="c-extr"></canvas></div></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-head" onclick="togS('dep')">
+      <div><div class="sec-title">Departamentos — P&amp;L proporcional</div><div class="sec-meta" id="meta-dep"></div></div>
+      <span class="sec-toggle" id="tog-dep">▶</span>
+    </div>
+    <div class="sec-body" id="sec-dep">
+      <div style="padding:16px 18px">
+        <div class="deptos-grid" id="deptos-grid"></div>
+        <div style="background:var(--bg3);border-radius:10px;padding:14px">
+          <div style="font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:10px">Neto proporcional — 18m</div>
+          <div class="chart-wrap"><canvas id="c-dep"></canvas></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-head" onclick="togS('inv')">
+      <div><div class="sec-title">Inversiones financieras</div><div class="sec-meta" id="meta-inv"></div></div>
+      <span class="sec-toggle" id="tog-inv">▶</span>
+    </div>
+    <div class="sec-body" id="sec-inv">
+      <div class="inv-grid" id="inv-ent-cards"></div>
+      <div style="padding:16px 18px"><div class="chart-wrap" style="height:180px"><canvas id="c-inv"></canvas></div></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-head" onclick="togS('pnl')">
+      <span class="sec-title">P&amp;L Personal</span>
+      <span class="sec-toggle" id="tog-pnl">▶</span>
+    </div>
+    <div class="sec-body" id="sec-pnl">
+      <div class="pnl-controls">
+        <label>Período:</label>
+        <select class="ctl" id="pnl-n" onchange="syncPeriodo('personal')">
+          <option value="6">Últimos 6</option>
+          <option value="12">Últimos 12</option>
+          <option value="18" selected>Últimos 18</option>
+          <option value="999">Todos</option>
+        </select>
+        <label style="margin-left:12px">Promedio:</label>
+        <select class="ctl" id="pnl-avg" onchange="renderPnl()">
+          <option value="all">Todos los meses</option>
+          <option value="6">Últimos 6 meses</option>
+          <option value="12">Últimos 12 meses</option>
+          <option value="ytd">Año actual</option>
+        </select>
+      </div>
+      <div class="tbl-wrap"><table id="tbl-pnl"></table></div>
+    </div>
+  </div>
+
+  </div><!-- /vista-personal -->
+
+  <!-- ══ CASA ══ -->
+  <div id="vista-casa" style="display:none">
+
+  <div class="sec">
+    <div class="sec-head" onclick="togSC('gop-casa')">
+      <div><div class="sec-title">Gastos sin ocio — 18m</div><div class="sec-meta" id="meta-gop-casa"></div></div>
+      <span class="sec-toggle" id="tog-gop-casa">▼</span>
+    </div>
+    <div class="sec-body open" id="sec-gop-casa">
+      <div class="chart-layout">
+        <div class="legend-panel" id="leg-gop-casa"></div>
+        <div class="chart-area"><div class="chart-wrap"><canvas id="c-gop-casa"></canvas></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-head" onclick="togSC('ocio-casa')">
+      <div><div class="sec-title">Gastos de ocio — 18m</div><div class="sec-meta" id="meta-ocio-casa"></div></div>
+      <span class="sec-toggle" id="tog-ocio-casa">▶</span>
+    </div>
+    <div class="sec-body" id="sec-ocio-casa">
+      <div class="chart-area"><div class="chart-wrap"><canvas id="c-ocio-casa"></canvas></div></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-head" onclick="togSC('aportes-casa')">
+      <div><div class="sec-title">Aportes Seba + Bea vs Gastos — 18m</div><div class="sec-meta" id="meta-aportes-casa"></div></div>
+      <span class="sec-toggle" id="tog-aportes-casa">▶</span>
+    </div>
+    <div class="sec-body" id="sec-aportes-casa">
+      <div class="chart-area"><div class="chart-wrap" style="height:240px"><canvas id="c-aportes-casa"></canvas></div></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-head" onclick="togSC('pnl-casa')">
+      <span class="sec-title">P&amp;L Casa</span>
+      <span class="sec-toggle" id="tog-pnl-casa">▶</span>
+    </div>
+    <div class="sec-body" id="sec-pnl-casa">
+      <div class="pnl-controls">
+        <label>Período:</label>
+        <select class="ctl" id="pnl-n-casa" onchange="syncPeriodo('casa')">
+          <option value="6">Últimos 6</option>
+          <option value="12">Últimos 12</option>
+          <option value="18" selected>Últimos 18</option>
+          <option value="999">Todos</option>
+        </select>
+        <label style="margin-left:12px">Promedio:</label>
+        <select class="ctl" id="pnl-avg-casa" onchange="renderPnlCasa()">
+          <option value="all">Todos los meses</option>
+          <option value="6">Últimos 6 meses</option>
+          <option value="12">Últimos 12 meses</option>
+          <option value="ytd">Año actual</option>
+        </select>
+      </div>
+      <div class="tbl-wrap"><table id="tbl-pnl-casa"></table></div>
+    </div>
+  </div>
+
+  </div><!-- /vista-casa -->
+
+  <!-- ══ CARGAR ══ -->
+  <div id="vista-cargar" style="display:none">
+
+    <!-- Estado de cuenta Casa -->
+    <div class="cxp-box" id="cxp-box">
+      <div style="font-size:11px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--text3)">Estado de cuenta Casa</div>
+      <div class="cxp-item">Casa → Seba: <strong id="cxp-seba" class="cxp-neg">—</strong></div>
+      <div class="cxp-item">Casa → Bea: <strong id="cxp-bea" class="cxp-neg">—</strong></div>
+      <div style="font-size:11px;color:var(--text3);margin-left:auto">Basado en gastos pendientes de reembolso</div>
+    </div>
+
+    <!-- Fuentes -->
+    <div class="source-tabs">
+      <button class="stab on" onclick="swSource('texto',this)">Texto / Pegar</button>
+      <button class="stab" onclick="swSource('manual',this)">Manual</button>
+      <button class="stab" onclick="swSource('imagen',this)">Imagen</button>
+      <button class="stab" onclick="swSource('pdf',this)">PDF</button>
+    </div>
+
+    <!-- Texto -->
+    <div id="src-texto">
+      <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
+        <select class="ctl" id="src-banco">
+          <option value="santander-tc">Santander TC</option>
+          <option value="santander-cc">Santander CC</option>
+          <option value="bci">BCI</option>
+          <option value="otro">Otro banco</option>
+        </select>
+        <select class="ctl" id="src-planilla-default">
+          <option value="auto">Detectar automático</option>
+          <option value="personal">Todo a Personal</option>
+          <option value="casa">Todo a Casa</option>
+        </select>
+        <button class="abtn abtn-ok" onclick="procesarTexto()" style="padding:6px 16px">Analizar →</button>
+      </div>
+      <textarea id="txt-cartola" style="width:100%;height:160px;background:var(--bg3);border:1px solid var(--border2);border-radius:10px;padding:10px 12px;font-size:12px;font-family:var(--mono);color:var(--text);outline:none;resize:vertical" placeholder="Pega aquí tu cartola, extracto bancario o lista de movimientos.
+
+Ejemplos:
+01/04/2025  COPEC PLAZA NORTE     -45.000
+02/04/2025  JUMBO APOQUINDO       -87.500
+03/04/2025  SPOTIFY                -6.990
+10/04/2025  TRANSF DE RODRIGO    +45.000"></textarea>
+      <div class="proceso-status" id="status-texto" style="display:none">
+        <div class="spinner"></div><span>Analizando movimientos...</span>
+      </div>
+    </div>
+
+    <!-- Manual -->
+    <div id="src-manual" style="display:none">
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px;max-width:500px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+          <div class="pf"><label>Fecha</label><input type="date" id="man-fecha"></div>
+          <div class="pf"><label>Monto</label><input type="number" id="man-monto" placeholder="45000" step="1"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+          <div class="pf"><label>Planilla</label>
+            <select id="man-planilla">
+              <option value="personal">Personal</option>
+              <option value="casa">Casa</option>
+            </select>
+          </div>
+          <div class="pf"><label>Tipo</label>
+            <select id="man-tipo">
+              <option value="gasto">Gasto</option>
+              <option value="ingreso">Ingreso</option>
+              <option value="inversion">Inversión</option>
+              <option value="devolucion">Devolución</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+          <div class="pf"><label>Concepto</label>
+            <input type="text" id="man-concepto" list="man-c-list" placeholder="Comida">
+            <datalist id="man-c-list"></datalist>
+          </div>
+          <div class="pf"><label>Ítem</label>
+            <input type="text" id="man-item" list="man-i-list" placeholder="Almuerzo">
+            <datalist id="man-i-list"></datalist>
+          </div>
+        </div>
+        <div class="pf" style="margin-bottom:10px"><label>Descripción / Comentario</label>
+          <input type="text" id="man-desc" placeholder="COPEC LAS CONDES">
+        </div>
+        <div id="man-casa-fields" style="display:none;background:var(--bg3);border-radius:8px;padding:10px;margin-bottom:10px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div class="pf"><label>Pagado por</label>
+              <select id="man-pagado">
+                <option value="Seba">Seba</option>
+                <option value="Bea">Bea</option>
+              </select>
+            </div>
+            <div class="pf"><label>Reembolsado</label>
+              <select id="man-reembolso">
+                <option value="0">Pendiente</option>
+                <option value="1">Saldado</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <button class="abtn abtn-ok" onclick="agregarManual()" style="width:100%;padding:8px">+ Agregar movimiento</button>
+      </div>
+    </div>
+
+    <!-- Imagen -->
+    <div id="src-imagen" style="display:none">
+      <div class="upload-zone" onclick="$('inp-img').click()">
+        <input type="file" id="inp-img" accept="image/*" multiple onchange="procesarImagen(this)">
+        <div style="font-size:2rem;margin-bottom:8px">📷</div>
+        <div style="font-size:13px;color:var(--text2)">Haz clic o arrastra un screenshot de tu app bancaria</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px">Santander, BCI, Banco Chile — JPG o PNG</div>
+      </div>
+      <div class="proceso-status" id="status-img" style="display:none">
+        <div class="spinner"></div><span>Extrayendo movimientos de la imagen...</span>
+      </div>
+    </div>
+
+    <!-- PDF -->
+    <div id="src-pdf" style="display:none">
+      <div class="upload-zone" onclick="$('inp-pdf').click()">
+        <input type="file" id="inp-pdf" accept=".pdf" onchange="procesarPDF(this)">
+        <div style="font-size:2rem;margin-bottom:8px">📄</div>
+        <div style="font-size:13px;color:var(--text2)">Haz clic para subir la cartola en PDF</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px">Se extraerán automáticamente todos los movimientos</div>
+      </div>
+      <div class="proceso-status" id="status-pdf" style="display:none">
+        <div class="spinner"></div><span>Procesando PDF...</span>
+      </div>
+    </div>
+
+    <!-- Duplicados pendientes -->
+    <div id="dup-section" style="display:none;margin-top:1rem">
+      <div class="section-label">⚠ Posibles duplicados — revisar</div>
+      <div id="dup-list"></div>
+    </div>
+
+    <!-- Movimientos pendientes -->
+    <div style="margin-top:1.25rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
+        <div class="section-label" style="margin:0">Movimientos por confirmar (<span id="n-pend">0</span>)</div>
+        <div style="display:flex;gap:8px">
+          <button class="abtn abtn-del" onclick="limpiarPendientes()" id="btn-limpiar" style="display:none">✕ Limpiar todo</button>
+          <button class="abtn abtn-ok" onclick="confirmarTodos()" id="btn-confirmar" style="display:none">✓ Confirmar todos →</button>
+        </div>
+      </div>
+      <div id="pend-list"></div>
+    </div>
+
+    <div class="confirm-bar" id="confirm-bar" style="display:none">
+      <div style="font-size:13px;color:var(--text2)"><span id="n-sel">0</span> movimientos seleccionados</div>
+      <button class="abtn abtn-ok" onclick="confirmarTodos()" style="padding:8px 20px;font-size:13px">✓ Confirmar y guardar →</button>
+    </div>
+  </div>
+
+
+  <!-- ══ HISTORIAL (compartido) ══ -->
+  <div class="sec">
+    <div class="sec-head" onclick="togS('hist')">
+      <span class="sec-title">Historial</span>
+      <span class="sec-meta" id="hist-cnt"></span>
+    </div>
+    <div class="sec-body open" id="sec-hist" style="scroll-margin-top:60px">
+      <div class="filter-banner" id="filter-banner">
+        <span id="filter-desc">Filtrando por: </span>
+        <button onclick="clearFilter()">✕ Limpiar filtro</button>
+      </div>
+      <div class="hist-ctrls">
+        <input type="text" id="hq" placeholder="Buscar..." oninput="filtH()">
+        <select class="ctl" id="ht" onchange="filtH()">
+          <option value="">Todos los tipos</option>
+          <option value="gasto">Gasto</option><option value="ingreso">Ingreso</option>
+          <option value="inversion">Inversión</option><option value="devolucion">Devolución</option>
+          <option value="transferencia_interna">Transf. interna</option>
+        </select>
+        <select class="ctl" id="hp" onchange="filtH()">
+          <option value="">Ambas</option>
+          <option value="personal">Personal</option><option value="casa">Casa</option>
+        </select>
+        <select class="ctl" id="hm" onchange="filtH()"><option value="">Todos los meses</option></select>
+        <select class="ctl" id="hc" onchange="filtH()"><option value="">Todos los conceptos</option></select>
+        <button class="dl-btn" onclick="dlHist()">↓ CSV</button>
+      </div>
+      <div class="hist-wrap" style="max-height:450px;overflow-y:auto;overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr>
+            <th style="font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--text3);padding:8px 12px;border-bottom:1px solid var(--border);text-align:left;font-weight:400;background:var(--bg2);position:sticky;top:0;z-index:2">Fecha</th>
+            <th style="font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--text3);padding:8px 12px;border-bottom:1px solid var(--border);font-weight:400;background:var(--bg2);position:sticky;top:0;z-index:3">Plan.</th>
+            <th style="font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--text3);padding:8px 12px;border-bottom:1px solid var(--border);font-weight:400;background:var(--bg2);position:sticky;top:0;z-index:3">Tipo</th>
+            <th style="font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--text3);padding:8px 12px;border-bottom:1px solid var(--border);text-align:left;font-weight:400;background:var(--bg2);position:sticky;top:0;z-index:3">Concepto / Ítem</th>
+            <th style="font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--text3);padding:8px 12px;border-bottom:1px solid var(--border);text-align:right;font-weight:400;background:var(--bg2);position:sticky;top:0;z-index:3">Monto</th>
+            <th style="font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--text3);padding:8px 12px;border-bottom:1px solid var(--border);text-align:left;font-weight:400;background:var(--bg2);position:sticky;top:0;z-index:3">Medio</th>
+            <th style="font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--text3);padding:8px 12px;border-bottom:1px solid var(--border);text-align:left;font-weight:400;background:var(--bg2);position:sticky;top:0;z-index:3">Comentario</th>
+            <th style="background:var(--bg2);padding:8px 12px;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:3"></th>
+          </tr></thead>
+          <tbody id="hbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div><!-- /main -->
+
+<!-- GESTOR DE CONCEPTOS -->
+<div class="gest-overlay" id="gest-modal">
+  <div class="gest-modal">
+    <div class="gest-head">
+      <h3>Conceptos e ítems</h3>
+      <button onclick="closeGest()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer">✕</button>
+    </div>
+    <div class="gest-tabs" style="display:flex;gap:4px;background:var(--bg3);border-radius:7px;padding:3px;flex-shrink:0;margin:12px 20px 0">
+      <button class="gtab on" onclick="swGest('personal',this)">Personal</button>
+      <button class="gtab" onclick="swGest('casa',this)">Casa</button>
+    </div>
+    <div class="gest-body">
+      <div class="gest-planilla">
+        <div class="gest-col">
+          <div class="gest-col-title">Conceptos</div>
+          <div id="gest-conceptos"></div>
+          <div class="gest-actions">
+            <input class="gest-input" id="gest-new-concepto" placeholder="Nuevo concepto...">
+            <button class="gbtn gbtn-add" onclick="addConcepto()">+ Agregar</button>
+          </div>
+          <div id="gest-concepto-actions" style="display:none;margin-top:8px">
+            <div style="font-size:11px;color:var(--text3);margin-bottom:5px">Seleccionado: <strong id="gest-sel-concepto"></strong></div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <input class="gest-input" id="gest-ren-concepto" placeholder="Renombrar a...">
+              <button class="gbtn gbtn-ren" onclick="renConcepto()">↩ Renombrar</button>
+              <button class="gbtn gbtn-del" onclick="delConcepto()">✕ Eliminar</button>
+            </div>
+            <div class="gest-warning" id="gest-warn-concepto"></div>
+          </div>
+        </div>
+        <div class="gest-col">
+          <div class="gest-col-title">Ítems de <span id="gest-items-of">—</span></div>
+          <div id="gest-items"></div>
+          <div class="gest-actions">
+            <input class="gest-input" id="gest-new-item" placeholder="Nuevo ítem..." disabled>
+            <button class="gbtn gbtn-add" onclick="addItem()" id="btn-add-item" disabled>+ Agregar</button>
+          </div>
+          <div id="gest-item-actions" style="display:none;margin-top:8px">
+            <div style="font-size:11px;color:var(--text3);margin-bottom:5px">Ítem: <strong id="gest-sel-item"></strong></div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <input class="gest-input" id="gest-ren-item" placeholder="Renombrar a...">
+              <button class="gbtn gbtn-ren" onclick="renItem()">↩ Renombrar</button>
+              <button class="gbtn gbtn-del" onclick="delItem()">✕ Eliminar</button>
+            </div>
+            <div class="gest-warning" id="gest-warn-item"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<div class="overlay" id="modal">
+  <div class="modal" style="width:500px">
+    <h3>Editar movimiento <span id="mod-id" style="font-size:11px;color:var(--text3);font-weight:400"></span></h3>
+    <div class="fgrid">
+      <div class="frow"><label>Fecha</label><input type="date" id="ef"></div>
+      <div class="frow"><label>Monto ($)</label><input type="number" id="em" step="1"></div>
+    </div>
+    <div class="fgrid">
+      <div class="frow"><label>Planilla</label>
+        <select id="epl">
+          <option value="personal">Personal (Seba)</option>
+          <option value="casa">Casa</option>
+        </select>
+      </div>
+      <div class="frow"><label>Tipo</label>
+        <select id="et">
+          <option value="gasto">Gasto</option>
+          <option value="ingreso">Ingreso</option>
+          <option value="inversion">Inversión</option>
+          <option value="devolucion">Devolución</option>
+          <option value="transferencia_interna">Transf. interna</option>
+        </select>
+      </div>
+    </div>
+    <div class="fgrid">
+      <div class="frow"><label>Concepto</label>
+        <input type="text" id="ec" list="ec-list">
+        <datalist id="ec-list"></datalist>
+      </div>
+      <div class="frow"><label>Ítem</label>
+        <input type="text" id="ei" list="ei-list">
+        <datalist id="ei-list"></datalist>
+      </div>
+    </div>
+    <div class="fgrid">
+      <div class="frow"><label>Medio de pago</label><input type="text" id="emed"></div>
+      <div class="frow"><label>Pagado por</label><input type="text" id="epag"></div>
+    </div>
+    <div class="frow"><label>Comentario</label><input type="text" id="eco"></div>
+    <div id="mod-status" style="font-size:11px;color:var(--green);margin-top:8px;min-height:16px"></div>
+    <div class="mbtns">
+      <button class="btn btn-g" onclick="closeMod()">Cancelar</button>
+      <button class="btn btn-s" onclick="saveMod()">Guardar cambio</button>
+    </div>
+  </div>
+</div>
+
+
+
+<script>
+const D = {
+  pm:{}, cm:{}, hist:[], pnl:{}, pnl_casa:{},
+  gastos_op:{}, extras:{}, inversiones_ent:{},
+  meses_all:[], meses_18:[], meses_all_casa:[], meses_18_casa:[],
+  gastos_casa:{}, aportes:{}, items_personal:{}, items_casa:{},
+  reglas:[]
+};
+
+
+
+// ── SUPABASE CONFIG ───────────────────────────────────────────────
+const SUPABASE_URL = 'https://kdsnburepycsxzddosot.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_trd6VNRXK2SqPvWWxy189A_nOcw9n5e';
+
+const sbHeaders = {
+  'apikey': SUPABASE_KEY,
+  'Authorization': 'Bearer ' + SUPABASE_KEY,
+  'Content-Type': 'application/json',
+  'Prefer': 'return=representation'
+};
+
+async function sbGet(table, params='') {
+  const r = await fetch(SUPABASE_URL + '/rest/v1/' + table + '?' + params, {
+    headers: sbHeaders
+  });
+  if(!r.ok) throw new Error('Supabase error: ' + r.status);
+  return r.json();
+}
+
+async function sbPost(table, body) {
+  const r = await fetch(SUPABASE_URL + '/rest/v1/' + table, {
+    method: 'POST',
+    headers: sbHeaders,
+    body: JSON.stringify(body)
+  });
+  if(!r.ok) throw new Error('Supabase error: ' + r.status);
+  return r.json();
+}
+
+async function sbPatch(table, id, body) {
+  const r = await fetch(SUPABASE_URL + '/rest/v1/' + table + '?id=eq.' + id, {
+    method: 'PATCH',
+    headers: sbHeaders,
+    body: JSON.stringify(body)
+  });
+  if(!r.ok) throw new Error('Supabase error: ' + r.status);
+  return r.json();
+}
+
+async function sbPatchWhere(table, where, body) {
+  const r = await fetch(SUPABASE_URL + '/rest/v1/' + table + '?' + where, {
+    method: 'PATCH',
+    headers: sbHeaders,
+    body: JSON.stringify(body)
+  });
+  if(!r.ok) throw new Error('Supabase error: ' + r.status);
+  return r.json();
+}
+
+// ── API FUNCTIONS ─────────────────────────────────────────────────
+async function saveModBackend(id, datos) {
+  try {
+    await sbPatch('movimientos', id, {
+      fecha: datos.fecha,
+      año: datos.año,
+      mes: datos.mes,
+      planilla: datos.planilla,
+      concepto: datos.concepto,
+      item: datos.item,
+      monto: datos.monto,
+      tipo: datos.tipo,
+      medio_pago: datos.medio_pago,
+      comentario: datos.comentario,
+      pagado_por: datos.pagado_por
+    });
+  } catch(e) { console.error('Error guardando:', e); }
+}
+
+async function confirmarTodosBackend(movs) {
+  try {
+    const rows = movs.map(m => ({
+      fecha: m.fecha,
+      año: parseInt(m.fecha?.slice(0,4)) || new Date().getFullYear(),
+      mes: parseInt(m.fecha?.slice(5,7)) || new Date().getMonth()+1,
+      planilla: m.planilla || 'personal',
+      concepto: m.concepto || null,
+      item: m.item || null,
+      monto: m.monto || 0,
+      tipo: m.tipo || 'gasto',
+      comentario: m.descripcion || null,
+      pagado_por: m.pagado_por || null
+    }));
+    const res = await sbPost('movimientos', rows);
+    return res.map(r => r.id);
+  } catch(e) { console.error('Error confirmando:', e); return []; }
+}
+
+async function bulkRenameBackend(tipo, planilla, viejo, nuevo, concepto) {
+  try {
+    if(tipo === 'concepto') {
+      await sbPatchWhere('movimientos',
+        'planilla=eq.' + planilla + '&concepto=eq.' + encodeURIComponent(viejo),
+        {concepto: nuevo});
+    } else {
+      await sbPatchWhere('movimientos',
+        'planilla=eq.' + planilla + '&concepto=eq.' + encodeURIComponent(concepto) + '&item=eq.' + encodeURIComponent(viejo),
+        {item: nuevo});
+    }
+  } catch(e) { console.error('Error renombrando:', e); }
+}
+
+// ── BUILD DATA FROM SUPABASE ──────────────────────────────────────
+async function buildDataFromSupabase() {
+  // Cargar todos los movimientos (Supabase pagina de 1000 en 1000)
+  let allRows = [];
+  let offset = 0;
+  while(true) {
+    const rows = await sbGet('movimientos',
+      'select=*&order=fecha.desc,id.desc&limit=1000&offset=' + offset);
+    allRows = allRows.concat(rows);
+    if(rows.length < 1000) break;
+    offset += 1000;
+  }
+  return allRows;
+}
+
+// ── BOOT ──────────────────────────────────────────────────────────
+async function bootApp() {
+  showLoading();
+  try {
+    setLoadProgress(20);
+    // Cargar historial desde Supabase
+    const hist = await buildDataFromSupabase();
+    setLoadProgress(70);
+
+    // Construir datos agregados en el browser desde el historial
+    D.hist = hist;
+    buildAggregatedData();
+    setLoadProgress(95);
+
+    setTimeout(() => {
+      hideLoading();
+      initSel();
+      initHistSel();
+      upd();
+      filtH();
+    }, 200);
+  } catch(e) {
+    hideLoading();
+    document.body.innerHTML += `<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg);flex-direction:column;gap:12px">
+      <div style="color:var(--red);font-size:14px">Error conectando con Supabase</div>
+      <div style="color:var(--text3);font-size:12px">${e.message}</div>
+      <button onclick="bootApp()" style="background:var(--blue);color:#000;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Reintentar</button>
+    </div>`;
+  }
+}
+
+// ── BUILD AGGREGATED DATA IN BROWSER ─────────────────────────────
+function buildAggregatedData() {
+  const hist = D.hist;
+  const PART = {'2201':1.0,'1902':0.5,'2103':0.5};
+  const OCIO = new Set(['Comida Afuera','Panoramas','Viajes/Playa','Carrete']);
+
+  // Meses únicos
+  const mesesSetP = new Set(), mesesSetC = new Set();
+  hist.forEach(h => {
+    const k = h.año + '-' + String(h.mes).padStart(2,'0');
+    if(h.planilla==='personal') mesesSetP.add(k);
+    else mesesSetC.add(k);
+  });
+  const meses_all = [...mesesSetP].sort();
+  const meses_all_casa = [...mesesSetC].sort();
+  D.meses_all = meses_all;
+  D.meses_18 = meses_all.slice(-18);
+  D.meses_all_casa = meses_all_casa;
+  D.meses_18_casa = meses_all_casa.slice(-18);
+
+  // pm/cm
+  D.pm = {}; D.cm = {};
+  hist.forEach(h => {
+    const k = h.año + '-' + String(h.mes).padStart(2,'0');
+    const obj = h.planilla==='personal' ? D.pm : D.cm;
+    if(!obj[k]) obj[k] = {};
+    obj[k][h.tipo] = (obj[k][h.tipo]||0) + h.monto;
+  });
+
+  // pnl personal
+  D.pnl = {};
+  meses_all.forEach(m => {
+    const [y,mo] = m.split('-').map(Number);
+    const rows = hist.filter(h=>h.planilla==='personal'&&h.año===y&&h.mes===mo);
+    D.pnl[m] = {
+      sueldo: rows.filter(h=>h.subtipo==='sueldo').reduce((s,h)=>s+h.monto,0),
+      bono: rows.filter(h=>h.subtipo==='bono_otro').reduce((s,h)=>s+h.monto,0),
+      arriendos: {}, hipotecarios: {}, gastos_admin: 0
+    };
+    rows.filter(h=>h.tipo==='ingreso'&&h.subtipo?.startsWith('arriendo_')).forEach(h=>{
+      const d=h.concepto?.replace('Arriendo ','');
+      if(d) D.pnl[m].arriendos[d]=(D.pnl[m].arriendos[d]||0)+h.monto;
+    });
+    rows.filter(h=>h.subtipo==='hipotecario').forEach(h=>{
+      const d=h.item?.replace('Hipotecario ','');
+      if(d) D.pnl[m].hipotecarios[d]=(D.pnl[m].hipotecarios[d]||0)+h.monto;
+    });
+    D.pnl[m].gastos_admin = rows.filter(h=>h.subtipo==='gasto_depto').reduce((s,h)=>s+h.monto,0);
+  });
+
+  // gastos_op y extras
+  D.gastos_op = {}; D.extras = {};
+  hist.filter(h=>h.planilla==='personal').forEach(h=>{
+    const k=h.año+'-'+String(h.mes).padStart(2,'0');
+    if(h.subtipo==='operacional'&&h.tipo==='gasto') {
+      if(!D.gastos_op[k]) D.gastos_op[k]={};
+      const c=h.concepto||'Otros';
+      D.gastos_op[k][c]=(D.gastos_op[k][c]||0)+h.monto;
+    }
+    if(h.subtipo==='extraordinario'&&h.tipo==='gasto') {
+      if(!D.extras[k]) D.extras[k]={};
+      const c=h.item||'Otros';
+      D.extras[k][c]=(D.extras[k][c]||0)+h.monto;
+    }
+  });
+
+  // inversiones_ent
+  D.inversiones_ent = {};
+  const ENTS = ['Fintual','Toesca','Racional','Security','Budacom','Capitaria'];
+  hist.filter(h=>h.planilla==='personal'&&(h.subtipo==='hipotecario'||h.subtipo==='rescate_fondo')).forEach(h=>{
+    const k=h.año+'-'+String(h.mes).padStart(2,'0');
+    if(!D.inversiones_ent[k]) D.inversiones_ent[k]={aportes:{},rescates:{}};
+    const com=(h.comentario||'').toUpperCase();
+    let ent='Otros';
+    for(const e of ENTS) { if(com.includes(e.toUpperCase())){ent=e;break;} }
+    if(h.subtipo==='hipotecario') {
+      D.inversiones_ent[k].aportes[ent]=(D.inversiones_ent[k].aportes[ent]||0)+h.monto;
+    } else {
+      D.inversiones_ent[k].rescates[ent]=(D.inversiones_ent[k].rescates[ent]||0)+h.monto;
+    }
+  });
+
+  // gastos_casa y pnl_casa
+  D.gastos_casa = {}; D.pnl_casa = {};
+  meses_all_casa.forEach(m => {
+    const [y,mo] = m.split('-').map(Number);
+    const rows = hist.filter(h=>h.planilla==='casa'&&h.año===y&&h.mes===mo);
+    const sin={}, ocio={};
+    rows.forEach(h=>{
+      const neto=h.tipo==='gasto'?h.monto:(h.tipo==='devolucion'?-h.monto:0);
+      if(neto<=0) return;
+      const c=h.concepto||'Otros';
+      if(OCIO.has(c)) ocio[c]=(ocio[c]||0)+neto;
+      else sin[c]=(sin[c]||0)+neto;
+    });
+    D.gastos_casa[m]={sin_ocio:sin,ocio:ocio};
+    const totSin=Object.values(sin).reduce((s,v)=>s+v,0);
+    const totOcio=Object.values(ocio).reduce((s,v)=>s+v,0);
+    // Aportes: Seba = ingresos de Seba, Bea = transferencias
+    const apSeba=rows.filter(h=>h.tipo==='ingreso'&&(h.pagado_por==='Seba'||h.planilla==='personal')).reduce((s,h)=>s+h.monto,0);
+    const apBea=rows.filter(h=>h.tipo==='ingreso'&&h.pagado_por==='Bea').reduce((s,h)=>s+h.monto,0);
+    D.pnl_casa[m]={
+      gastos_sin_ocio:sin, gastos_ocio:ocio,
+      total_sin_ocio:totSin, total_ocio:totOcio,
+      total_gastos:totSin+totOcio,
+      seba:apSeba, bea:apBea,
+      total_aportes:apSeba+apBea,
+      saldo:apSeba+apBea-(totSin+totOcio)
+    };
+  });
+
+  // items_personal e items_casa
+  D.items_personal = {}; D.items_casa = {};
+  hist.filter(h=>h.planilla==='personal'&&h.subtipo==='operacional'&&h.tipo==='gasto').forEach(h=>{
+    const k=h.año+'-'+String(h.mes).padStart(2,'0');
+    const c=h.concepto||'Otros', it=h.item||'Otros';
+    if(!D.items_personal[k]) D.items_personal[k]={};
+    if(!D.items_personal[k][c]) D.items_personal[k][c]={};
+    D.items_personal[k][c][it]=(D.items_personal[k][c][it]||0)+h.monto;
+  });
+  hist.filter(h=>h.planilla==='casa'&&h.tipo==='gasto').forEach(h=>{
+    const k=h.año+'-'+String(h.mes).padStart(2,'0');
+    const c=h.concepto||'Otros', it=h.item||'Otros';
+    if(!D.items_casa[k]) D.items_casa[k]={};
+    if(!D.items_casa[k][c]) D.items_casa[k][c]={};
+    D.items_casa[k][c][it]=(D.items_casa[k][c][it]||0)+h.monto;
+  });
+
+  D.reglas = [];
+}
+
+bootApp();
+
+</script>
+</body>
+</html>
