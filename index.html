@@ -710,6 +710,23 @@ const D = {
 
 
 
+
+// ── LOADING STATE ──────────────────────────────────────────────
+function showLoading() {
+  const div = document.createElement('div');
+  div.id = 'loading-overlay';
+  div.style.cssText = 'position:fixed;inset:0;background:#0D0D0D;display:flex;align-items:center;justify-content:center;z-index:9999;flex-direction:column;gap:16px';
+  div.innerHTML = '<div style="font-size:13px;font-family:monospace;color:#505050;letter-spacing:.08em">CARGANDO DATOS...</div><div style="width:200px;height:2px;background:#252525;border-radius:1px;overflow:hidden"><div id="load-bar" style="height:100%;background:#60A5FA;width:0%;transition:width .3s;border-radius:1px"></div></div>';
+  document.body.appendChild(div);
+}
+function setLoadProgress(p) {
+  const bar = document.getElementById('load-bar');
+  if(bar) bar.style.width = p + '%';
+}
+function hideLoading() {
+  const el = document.getElementById('loading-overlay');
+  if(el) el.remove();
+}
 // ── SUPABASE CONFIG ───────────────────────────────────────────────
 const SUPABASE_URL = 'https://kdsnburepycsxzddosot.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_trd6VNRXK2SqPvWWxy189A_nOcw9n5e';
