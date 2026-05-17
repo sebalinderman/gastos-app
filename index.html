@@ -1963,53 +1963,121 @@ function parsearCartola(texto, banco) {
   const lineas = texto.split('\n').filter(l => l.trim().length > 3);
   const movs = [];
 
+  // ── SANTANDER TC: LUGAR FECHA DD/MM/YY DESCRIPCION $MONTO ──
+  // Detectar por presencia de líneas con fecha DD/MM/YY y $monto
+  const esSantanderTC = lineas.filter(l => /\d{2}\/\d{2}\/\d{2}\s+.+\$\s*[\d.,]+/.test(l)).length >= 2;
+  if(esSantanderTC || banco === 'santander-tc') {
+    const reTC = /(\d{2}\/\d{2}\/\d{2})\s+(.+?)\s+\$\s*([+-]?[\d.]+)\s*$/;
+    let seccionBea = false; // true cuando estamos en movimientos XXXX-8969
+    for(const linea of lineas) {
+      const l = linea.trim();
+      // Detectar cambio de sección tarjeta extensión Bea (XXXX-8969)
+      if(/MOVIMIENTOS\s+TARJETA\s+XXXX[-\s]?8969/i.test(l)) { seccionBea = true; continue; }
+      // Detectar nueva sección que no sea 8969 → volver a sección principal
+      if(/MOVIMIENTOS\s+TARJETA\s+XXXX[-\s]?(?!8969)\d{4}/i.test(l)) { seccionBea = false; continue; }
+      // Ignorar totales y encabezados
+      if(/^(total\s+operaciones|movimientos\s+tarjeta|período|monto\s+cancelado|nota\s+de\s+credito|intereses)/i.test(l)) continue;
+      const m = l.match(reTC);
+      if(!m) continue;
+      const fecha = parseFecha(m[1]);
+      const desc = m[2].trim();
+      const monto = parseFloat(m[3].replace(/\./g,''));
+      if(!fecha || !desc || isNaN(monto) || monto === 0) continue;
+      if(monto < 0) continue; // ignorar pagos/notas de crédito
+      movs.push({
+        fecha,
+        descripcion: desc,
+        monto_original: -monto, // TC: todos son gastos (negativos)
+        monto,
+        _seccionBea: seccionBea, // flag para clasificar
+      });
+    }
+    return movs;
+  }
+
+  // ── BCI: fecha desc serie monto saldo (sin columna cargo/abono separada) ──
+  const esBCI = lineas.filter(l => /^\d{2}-\d{2}-\d{4}\s+.+\s+\d{3,12}\s+[\d.]+\s+[\d.]+\s*$/.test(l.trim())).length >= 2;
+  if(esBCI) {
+    const reBCI = /^(\d{2}-\d{2}-\d{4})\s+(.+?)\s+(\d{3,12})\s+([\d.,]+)\s+([\d.,]+)\s*$/;
+    const filas = [];
+    for(const linea of lineas) {
+      const m = linea.trim().match(reBCI);
+      if(!m) continue;
+      const desc = m[2].trim();
+      if(/^(fecha|descripci|serie|monto|saldo)/i.test(desc)) continue;
+      filas.push({
+        fecha: parseFecha(m[1]),
+        descripcion: desc,
+        monto: parseFloat(m[4].replace(/\./g,'').replace(',','.')),
+        saldo: parseFloat(m[5].replace(/\./g,'').replace(',','.'))
+      });
+    }
+    for(let i=0; i<filas.length; i++) {
+      const f = filas[i];
+      if(!f.fecha || !f.monto) continue;
+      let esAbono = false;
+      if(i < filas.length-1) {
+        esAbono = f.saldo > filas[i+1].saldo;
+      } else {
+        esAbono = Math.abs(f.saldo - f.monto) < 100;
+      }
+      movs.push({
+        fecha: f.fecha,
+        descripcion: f.descripcion,
+        monto_original: esAbono ? f.monto : -f.monto,
+        monto: f.monto
+      });
+    }
+    return movs;
+  }
+
   for(const linea of lineas) {
     const l = linea.trim();
     if(!l) continue;
 
     let fecha = null, desc = null, montoRaw = NaN;
 
+    // Patrón 0: Santander CC con tabs — DD-MM-YYYY\tDETALLE\tCARGO\tABONO\tSALDO
+    if(l.includes('\t')) {
+      const cols = l.split('\t').map(c => c.trim());
+      if(cols.length >= 3) {
+        const fechaCandidata = parseFecha(cols[0]);
+        if(fechaCandidata && cols[1] && cols[1].length > 2) {
+          const limpiar = v => v ? parseFloat(v.replace(/\$/g,'').replace(/\./g,'').replace(',','.')) || 0 : 0;
+          const cargo = limpiar(cols[2]);
+          const abono = limpiar(cols[3]);
+          if(cargo > 0 || abono > 0) {
+            fecha = fechaCandidata;
+            desc = cols[1];
+            montoRaw = abono > 0 ? abono : -cargo;
+          }
+        }
+      }
+    }
+
     // Patrón 1: YYYY-MM-DD  DESCRIPCION  -monto
-    // Ejemplo: 2026-04-13  COPEC APP  -114.007
-    let m = l.match(/^(\d{4}-\d{2}-\d{2})\s{1,4}(.+?)\s{2,}([+-]?[\d.,]+)\s*$/);
-    if(m) {
-      fecha = parseFecha(m[1]);
-      desc = m[2].trim();
-      montoRaw = parseMonto(m[3]);
+    if(!fecha) {
+      let m = l.match(/^(\d{4}-\d{2}-\d{2})\s{1,4}(.+?)\s{2,}([+-]?[\d.,]+)\s*$/);
+      if(m) { fecha = parseFecha(m[1]); desc = m[2].trim(); montoRaw = parseMonto(m[3]); }
     }
 
     // Patrón 2: DD/MM/YY  DESCRIPCION  monto
-    // Ejemplo: 12/04/26  COPEC APP  114.007
     if(!fecha) {
-      m = l.match(/^(\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4})\s{1,4}(.+?)\s{2,}([+-]?[\d.,]+)\s*$/);
-      if(m) {
-        fecha = parseFecha(m[1]);
-        desc = m[2].trim();
-        montoRaw = parseMonto(m[3]);
-      }
+      let m = l.match(/^(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})\s{1,4}(.+?)\s{2,}([+-]?[\d.,]+)\s*$/);
+      if(m) { fecha = parseFecha(m[1]); desc = m[2].trim(); montoRaw = parseMonto(m[3]); }
     }
 
-    // Patrón 3: fecha  desc  monto (espacios simples pero monto al final)
-    // Ejemplo: 2026-04-13 COPEC APP -114.007
+    // Patrón 3: fecha  desc  monto (espacios simples)
     if(!fecha) {
-      m = l.match(/^(\d{4}-\d{2}-\d{2}|\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4})\s+(.+?)\s+([+-]?[\d][\d.,]*)$/);
-      if(m) {
-        fecha = parseFecha(m[1]);
-        desc = m[2].trim();
-        montoRaw = parseMonto(m[3]);
-      }
+      let m = l.match(/^(\d{4}-\d{2}-\d{2}|\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})\s+(.+?)\s+([+-]?\d[\d.,]*)$/);
+      if(m) { fecha = parseFecha(m[1]); desc = m[2].trim(); montoRaw = parseMonto(m[3]); }
     }
 
     if(!fecha || !desc || isNaN(montoRaw) || montoRaw === 0) continue;
-    // Ignorar líneas que son totales o encabezados
     if(/total|saldo|monto|período|pagar|cuota|interés/i.test(desc) && !desc.match(/[A-Z]{3,}/)) continue;
+    if(/^(fecha|detalle|monto cargo|monto abono)$/i.test(desc)) continue;
 
-    movs.push({
-      fecha,
-      descripcion: desc,
-      monto_original: montoRaw,
-      monto: Math.abs(montoRaw)
-    });
+    movs.push({ fecha, descripcion: desc, monto_original: montoRaw, monto: Math.abs(montoRaw) });
   }
   return movs;
 }
@@ -2063,17 +2131,22 @@ function esDuplicado(mov) {
 }
 function crearPendiente(mov, clasificacion) {
   const dup = esDuplicado(mov);
+  // Movimientos de la tarjeta extensión Bea (XXXX-8969) → siempre casa, pagado_por Seba
+  const esBea = mov._seccionBea === true;
+  const planilla = esBea ? 'casa' : (clasificacion.planilla || 'personal');
+  const concepto = esBea ? (clasificacion.concepto || null) : clasificacion.concepto;
   return {
     id: Date.now() + Math.random(),
     ...mov,
-    planilla: clasificacion.planilla || 'personal',
+    planilla,
     tipo: clasificacion.tipo || 'gasto',
-    concepto: clasificacion.concepto,
+    concepto,
     item: clasificacion.item,
-    pagado_por: clasificacion.planilla==='casa'?'Seba':null,
+    pagado_por: planilla==='casa' ? 'Seba' : null,
     reembolsado: 0,
     posible_dup: dup || null,
     confirmado: false,
+    _seccionBea: undefined, // limpiar flag interno
   };
 }
 function procesarTexto() {
