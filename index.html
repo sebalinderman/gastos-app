@@ -2122,7 +2122,7 @@ function procesarPDF(input) {
   reader.onload = async (e) => {
     const b64 = e.target.result.split(',')[1];
     try {
-      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      const resp = await fetch('https://gastos-proxy.salinderman.workers.dev', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body: JSON.stringify({
