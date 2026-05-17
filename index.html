@@ -768,7 +768,7 @@ async function bootApp(){
     D.hist=all;
     buildAggregatedData();
     setLoadProgress(95);
-    setTimeout(()=>{hideLoading();initSel();initHistSel();upd();filtH();},200);
+    setTimeout(()=>{hideLoading();initSel();initHistSel();upd();filtH();cargarPendientesLocal();renderPendientes();},200);
   }catch(e){
     hideLoading();
     document.body.innerHTML+='<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#0D0D0D;flex-direction:column;gap:12px"><div style="color:#F87171;font-size:14px">Error conectando con Supabase</div><div style="color:#505050;font-size:12px">'+e.message+'</div><button onclick="bootApp()" style="background:#60A5FA;color:#000;border:none;padding:8px 16px;border-radius:8px;cursor:pointer">Reintentar</button></div>';
@@ -806,6 +806,15 @@ let expandedConcepts={};
 let pnlOrden={'personal':null,'casa':null};
 let itemsOrden={};
 let pendientes=[], gestPlanilla='personal', gestConcepto=null, gestItem=null;
+function guardarPendientesLocal() {
+  try { localStorage.setItem('gastos_pendientes', JSON.stringify(pendientes)); } catch(e) {}
+}
+function cargarPendientesLocal() {
+  try {
+    const raw = localStorage.getItem('gastos_pendientes');
+    if(raw) { pendientes = JSON.parse(raw); }
+  } catch(e) { pendientes = []; }
+}
 
 // ── ORDEN P&L ─────────────────────────────────────────────────────
 function getPnlOrden(pl){
@@ -2180,6 +2189,7 @@ function agregarManual() {
   renderPendientes();
 }
 function renderPendientes() {
+  guardarPendientesLocal();
   const n = pendientes.length;
   $('n-pend').textContent = n;
   $('badge-pend').textContent = n;
