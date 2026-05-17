@@ -768,7 +768,7 @@ async function bootApp(){
     D.hist=all;
     buildAggregatedData();
     setLoadProgress(95);
-    setTimeout(()=>{hideLoading();initSel();initHistSel();upd();filtH();cargarPendientesLocal();renderPendientes();},200);
+    setTimeout(async ()=>{hideLoading();initSel();initHistSel();upd();filtH();await cargarPendientesSB();renderPendientes();},200);
   }catch(e){
     hideLoading();
     document.body.innerHTML+='<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#0D0D0D;flex-direction:column;gap:12px"><div style="color:#F87171;font-size:14px">Error conectando con Supabase</div><div style="color:#505050;font-size:12px">'+e.message+'</div><button onclick="bootApp()" style="background:#60A5FA;color:#000;border:none;padding:8px 16px;border-radius:8px;cursor:pointer">Reintentar</button></div>';
@@ -806,13 +806,37 @@ let expandedConcepts={};
 let pnlOrden={'personal':null,'casa':null};
 let itemsOrden={};
 let pendientes=[], gestPlanilla='personal', gestConcepto=null, gestItem=null;
-function guardarPendientesLocal() {
-  try { localStorage.setItem('gastos_pendientes', JSON.stringify(pendientes)); } catch(e) {}
-}
-function cargarPendientesLocal() {
+// ── COLA PENDIENTES EN SUPABASE ───────────────────────────────────
+async function guardarPendientesSB() {
   try {
-    const raw = localStorage.getItem('gastos_pendientes');
-    if(raw) { pendientes = JSON.parse(raw); }
+    await fetch(SUPABASE_URL+'/rest/v1/pendientes_cola?id=neq.null', {method:'DELETE', headers:sbH});
+    if(pendientes.length === 0) return;
+    const rows = pendientes.map(p => ({
+      id: String(p.id),
+      fecha: p.fecha,
+      descripcion: p.descripcion,
+      monto: p.monto,
+      monto_original: p.monto_original,
+      planilla: p.planilla,
+      concepto: p.concepto,
+      item: p.item,
+      tipo: p.tipo,
+      pagado_por: p.pagado_por,
+      reembolsado: p.reembolsado || 0,
+      omitir: p.omitir || false,
+      posible_dup: p.posible_dup ? JSON.stringify(p.posible_dup) : null,
+    }));
+    await sbPost('pendientes_cola', rows);
+  } catch(e) { console.error('Error guardando pendientes:', e); }
+}
+async function cargarPendientesSB() {
+  try {
+    const rows = await sbGet('pendientes_cola', 'order=created_at.asc');
+    pendientes = rows.map(r => ({
+      ...r,
+      id: r.id,
+      posible_dup: r.posible_dup ? (typeof r.posible_dup === 'string' ? JSON.parse(r.posible_dup) : r.posible_dup) : null,
+    }));
   } catch(e) { pendientes = []; }
 }
 
@@ -2189,7 +2213,7 @@ function agregarManual() {
   renderPendientes();
 }
 function renderPendientes() {
-  guardarPendientesLocal();
+  guardarPendientesSB();
   const n = pendientes.length;
   $('n-pend').textContent = n;
   $('badge-pend').textContent = n;
