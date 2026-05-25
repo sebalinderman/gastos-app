@@ -581,7 +581,7 @@ Ejemplos:
       <div class="hist-wrap" style="max-height:450px;overflow-y:auto;overflow-x:auto">
         <table style="width:100%;border-collapse:collapse">
           <thead><tr>
-            <th style="font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--text3);padding:8px 12px;border-bottom:1px solid var(--border);text-align:left;font-weight:400;background:var(--bg2);position:sticky;top:0;z-index:2">Fecha</th>
+            <th onclick="toggleSortFecha()" style="font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--text3);padding:8px 12px;border-bottom:1px solid var(--border);text-align:left;font-weight:400;background:var(--bg2);position:sticky;top:0;z-index:2;cursor:pointer;user-select:none" id="th-fecha">Fecha <span id="sort-icon">↓</span></th>
             <th style="font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--text3);padding:8px 12px;border-bottom:1px solid var(--border);font-weight:400;background:var(--bg2);position:sticky;top:0;z-index:3">Plan.</th>
             <th style="font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--text3);padding:8px 12px;border-bottom:1px solid var(--border);font-weight:400;background:var(--bg2);position:sticky;top:0;z-index:3">Tipo</th>
             <th style="font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--text3);padding:8px 12px;border-bottom:1px solid var(--border);text-align:left;font-weight:400;background:var(--bg2);position:sticky;top:0;z-index:3">Concepto / Ítem</th>
@@ -800,7 +800,7 @@ function prevM(m){const[y,mo]=m.split('-').map(Number);return mo===1?(y-1)+'-12'
 
 // ── STATE ─────────────────────────────────────────────────────────
 let planilla='personal', mes='2026-04';
-let CH={}, CV={}, editId=null, histFiltered=[];
+let CH={}, CV={}, editId=null, histFiltered=[], histSortDesc=true;
 let activeFilter=null;
 let expandedConcepts={};
 let pnlOrden={'personal':null,'casa':null};
@@ -1770,6 +1770,7 @@ function filtH(){
     if(q&&!(h.concepto+' '+(h.item||'')+' '+(h.comentario||'')+' '+h.planilla).toLowerCase().includes(q))return false;
     return true;
   });
+  histFiltered.sort((a,b)=>histSortDesc?(b.fecha||'').localeCompare(a.fecha||''):(a.fecha||'').localeCompare(b.fecha||''));
   $('hist-cnt').textContent=histFiltered.length+' movimientos';
   const tbody=$('hbody');
   if(!histFiltered.length){tbody.innerHTML=`<tr><td colspan="8" style="text-align:center;padding:28px;color:var(--text3)">Sin resultados</td></tr>`;return;}
@@ -1786,6 +1787,11 @@ function filtH(){
         <button class="ebtn" onclick="openMod(${h.id})" title="Editar">✎</button>
       </td>
     </tr>`).join('');
+}
+function toggleSortFecha(){
+  histSortDesc=!histSortDesc;
+  $('sort-icon').textContent=histSortDesc?'↓':'↑';
+  filtH();
 }
 function dlHist(){
   const rows=histFiltered.length?histFiltered:D.hist;
@@ -2484,7 +2490,7 @@ function confirmarTodos() {
       pagado_por: p.pagado_por,
     });
   }
-  pendientes = pendientes.filter(p=>p.posible_dup);
+  pendientes = pendientes.filter(p=>p.posible_dup || p.omitir);
   renderPendientes();
   filtH();
   // Feedback
