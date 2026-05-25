@@ -2142,7 +2142,7 @@ function crearPendiente(mov, clasificacion) {
   const planilla = esBea ? 'casa' : (clasificacion.planilla || 'personal');
   const concepto = esBea ? (clasificacion.concepto || null) : clasificacion.concepto;
   return {
-    id: Date.now() + Math.random(),
+    id: String(Date.now()) + String(Math.floor(Math.random()*10000)),
     ...mov,
     planilla,
     tipo: clasificacion.tipo || 'gasto',
@@ -2285,7 +2285,7 @@ function agregarManual() {
     confirmado: false,
   };
   if(!mov.monto) { alert('Ingresa un monto válido'); return; }
-  mov.id = Date.now() + Math.random();
+  mov.id = String(Date.now()) + String(Math.floor(Math.random()*10000));
   pendientes.push(mov);
   // Limpiar campos
   $('man-monto').value=''; $('man-desc').value=''; $('man-concepto').value=''; $('man-item').value='';
