@@ -2331,7 +2331,11 @@ function renderPendientes() {
 
   $('pend-list').innerHTML = pendientes.map(p=>{
     const esCasa = p.planilla==='casa';
-    const conceptosList = CONCEPTOS_DB[p.planilla||'personal']||[];
+    const conceptosList = [
+      ...(CONCEPTOS_DB[p.planilla||'personal']||[]),
+      ...((p.tipo==='inversion' && !CONCEPTOS_DB[p.planilla||'personal']?.includes('Inversiones')) ? ['Inversiones'] : []),
+      ...((p.tipo==='ingreso' && !CONCEPTOS_DB[p.planilla||'personal']?.includes('Ingreso')) ? ['Ingreso'] : []),
+    ];
     const itemsList = (ITEMS_DB[p.planilla||'personal']||{})[p.concepto]||[];
     return `
     <div class="pend-card${p.posible_dup?' dup':''}${p.omitir?' omitido':''}" id="pc-${p.id}" style="${p.omitir?'opacity:.45;':''}">
