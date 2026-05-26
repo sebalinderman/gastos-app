@@ -2337,16 +2337,12 @@ function renderPendientes() {
 
   $('pend-list').innerHTML = pendientes.map(p=>{
     const esCasa = p.planilla==='casa';
-    const _baseConceptos = CONCEPTOS_DB[p.planilla||'personal']||[];
-    const _extraConceptos = [];
-    if(p.tipo==='inversion' && !_baseConceptos.includes('Inversiones')) _extraConceptos.push('Inversiones');
-    if(p.tipo==='ingreso') {
-      if(!_baseConceptos.includes('Ingreso')) _extraConceptos.push('Ingreso');
-      ['Arriendo 1902','Arriendo 2201','Arriendo 2103'].forEach(a=>{ if(!_baseConceptos.includes(a)) _extraConceptos.push(a); });
-      if(!_baseConceptos.includes('Sueldo')) _extraConceptos.push('Sueldo');
-      if(!_baseConceptos.includes('Bono')) _extraConceptos.push('Bono');
-    }
-    const conceptosList = [..._baseConceptos, ..._extraConceptos];
+    const CONCEPTOS_INGRESO = ['Sueldo','Bono / Otros','Arriendo 1902','Arriendo 2201','Arriendo 2103','Ingreso'];
+    const CONCEPTOS_INVERSION = ['Inversiones'];
+    const CONCEPTOS_GASTO = CONCEPTOS_DB[p.planilla||'personal']||[];
+    const conceptosList = p.tipo==='ingreso' ? CONCEPTOS_INGRESO :
+                          p.tipo==='inversion' ? CONCEPTOS_INVERSION :
+                          CONCEPTOS_GASTO;
     const itemsList = (ITEMS_DB[p.planilla||'personal']||{})[p.concepto]||[];
     return `
     <div class="pend-card${p.posible_dup?' dup':''}${p.omitir?' omitido':''}" id="pc-${p.id}" style="${p.omitir?'opacity:.45;':''}">
@@ -2371,10 +2367,10 @@ function renderPendientes() {
             </select>
           </div>
           <div class="pf" style="min-width:130px"><label>Concepto</label>
-            <input type="text" list="clist-${p.id}" value="${p.concepto||''}"
-              oninput="updatePend('${p.id}','concepto',this.value)"
-              onchange="updatePend('${p.id}','concepto',this.value)">
-            <datalist id="clist-${p.id}">${conceptosList.map(c=>`<option value="${c}">`).join('')}</datalist>
+            <select onchange="updatePend('${p.id}','concepto',this.value)">
+              <option value="">— elegir —</option>
+              ${conceptosList.map(c=>`<option value="${c}"${p.concepto===c?' selected':''}>${c}</option>`).join('')}
+            </select>
           </div>
           <div class="pf" style="min-width:120px"><label>Ítem</label>
             <input type="text" list="ilist-${p.id}" value="${p.item||''}"
