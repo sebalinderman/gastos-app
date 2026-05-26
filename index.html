@@ -2337,11 +2337,16 @@ function renderPendientes() {
 
   $('pend-list').innerHTML = pendientes.map(p=>{
     const esCasa = p.planilla==='casa';
-    const conceptosList = [
-      ...(CONCEPTOS_DB[p.planilla||'personal']||[]),
-      ...((p.tipo==='inversion' && !CONCEPTOS_DB[p.planilla||'personal']?.includes('Inversiones')) ? ['Inversiones'] : []),
-      ...((p.tipo==='ingreso' && !CONCEPTOS_DB[p.planilla||'personal']?.includes('Ingreso')) ? ['Ingreso'] : []),
-    ];
+    const _baseConceptos = CONCEPTOS_DB[p.planilla||'personal']||[];
+    const _extraConceptos = [];
+    if(p.tipo==='inversion' && !_baseConceptos.includes('Inversiones')) _extraConceptos.push('Inversiones');
+    if(p.tipo==='ingreso') {
+      if(!_baseConceptos.includes('Ingreso')) _extraConceptos.push('Ingreso');
+      ['Arriendo 1902','Arriendo 2201','Arriendo 2103'].forEach(a=>{ if(!_baseConceptos.includes(a)) _extraConceptos.push(a); });
+      if(!_baseConceptos.includes('Sueldo')) _extraConceptos.push('Sueldo');
+      if(!_baseConceptos.includes('Bono')) _extraConceptos.push('Bono');
+    }
+    const conceptosList = [..._baseConceptos, ..._extraConceptos];
     const itemsList = (ITEMS_DB[p.planilla||'personal']||{})[p.concepto]||[];
     return `
     <div class="pend-card${p.posible_dup?' dup':''}${p.omitir?' omitido':''}" id="pc-${p.id}" style="${p.omitir?'opacity:.45;':''}">
