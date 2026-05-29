@@ -337,11 +337,28 @@ tr:hover .move-btns { opacity:1; }
   <div id="vista-casa" style="display:none">
 
     <!-- Estado de cuenta Casa -->
-    <div class="cxp-box" id="cxp-box">
-      <div style="font-size:11px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--text3)">Estado de cuenta Casa</div>
-      <div class="cxp-item">Casa → Seba: <strong id="cxp-seba" class="cxp-neg">—</strong></div>
-      <div class="cxp-item">Casa → Bea: <strong id="cxp-bea" class="cxp-neg">—</strong></div>
-      <div style="font-size:11px;color:var(--text3);margin-left:auto">Basado en gastos pendientes de reembolso</div>
+    <div class="cxp-box" id="cxp-box" onclick="toggleCxP()" style="cursor:pointer;flex-direction:column;align-items:stretch">
+      <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap">
+        <div style="font-size:11px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--text3)">Estado de cuenta Casa</div>
+        <div class="cxp-item">Casa → Seba: <strong id="cxp-seba" class="cxp-neg">—</strong></div>
+        <div class="cxp-item">Casa → Bea: <strong id="cxp-bea" class="cxp-neg">—</strong></div>
+        <div style="font-size:11px;color:var(--text3);margin-left:auto">Basado en gastos pendientes de reembolso <span id="cxp-toggle-icon">▶</span></div>
+      </div>
+      <div id="cxp-detalle" style="display:none;margin-top:12px;overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead>
+            <tr style="color:var(--text3);font-family:var(--mono);font-size:10px;text-transform:uppercase;border-bottom:1px solid var(--border)">
+              <th style="padding:4px 8px;text-align:left;font-weight:400">Fecha</th>
+              <th style="padding:4px 8px;text-align:left;font-weight:400">Descripción</th>
+              <th style="padding:4px 8px;text-align:left;font-weight:400">Concepto</th>
+              <th style="padding:4px 8px;text-align:right;font-weight:400">Monto</th>
+              <th style="padding:4px 8px;text-align:center;font-weight:400">Pagado por</th>
+              <th style="padding:4px 8px;text-align:center;font-weight:400">Acción</th>
+            </tr>
+          </thead>
+          <tbody id="cxp-detalle-body"></tbody>
+        </table>
+      </div>
     </div>
 
   <div class="sec">
@@ -689,6 +706,12 @@ Ejemplos:
       <div class="frow"><label>Pagado por</label><input type="text" id="epag"></div>
     </div>
     <div class="frow"><label>Comentario</label><input type="text" id="eco"></div>
+    <div id="ereembolso-row" class="frow" style="display:none"><label>Reembolsado</label>
+      <select id="ereembolso">
+        <option value="0">Pendiente</option>
+        <option value="1">Reembolsado ✓</option>
+      </select>
+    </div>
     <div id="mod-status" style="font-size:11px;color:var(--green);margin-top:8px;min-height:16px"></div>
     <div class="mbtns">
       <button class="btn btn-g" onclick="closeMod()">Cancelar</button>
@@ -768,7 +791,7 @@ async function bootApp(){
     D.hist=all;
     buildAggregatedData();
     setLoadProgress(95);
-    setTimeout(async ()=>{hideLoading();initSel();initHistSel();upd();filtH();await cargarPendientesSB();renderPendientes();},200);
+    setTimeout(async ()=>{hideLoading();initSel();initHistSel();upd();filtH();await cargarPendientesSB();renderPendientes();actualizarCxP();},200);
   }catch(e){
     hideLoading();
     document.body.innerHTML+='<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#0D0D0D;flex-direction:column;gap:12px"><div style="color:#F87171;font-size:14px">Error conectando con Supabase</div><div style="color:#505050;font-size:12px">'+e.message+'</div><button onclick="bootApp()" style="background:#60A5FA;color:#000;border:none;padding:8px 16px;border-radius:8px;cursor:pointer">Reintentar</button></div>';
@@ -1836,12 +1859,15 @@ function openMod(id){
     const hist=[...new Set(D.hist.filter(x=>x.concepto===c).map(x=>x.item).filter(Boolean))];
     $('ei-list').innerHTML=[...new Set([...fijos,...hist])].sort().map(i=>`<option value="${i}">`).join('');
   };
+  // Mostrar campo reembolsado solo para gastos de Casa
+  const esCasaGasto = (h.planilla==='casa' && h.tipo==='gasto');
+  $('ereembolso-row').style.display = esCasaGasto ? '' : 'none';
+  if(esCasaGasto) $('ereembolso').value = h.reembolsado ? '1' : '0';
   $('modal').classList.add('show');
 }
 function closeMod(){$('modal').classList.remove('show');editId=null;}
 function saveMod(){
   const h=D.hist.find(x=>x.id===editId);if(!h)return;
-  // Guardar todos los campos
   h.fecha=$('ef').value;
   h.monto=parseFloat($('em').value)||0;
   h.planilla=$('epl').value;
@@ -1853,12 +1879,29 @@ function saveMod(){
   h.comentario=$('eco').value||null;
   h.año=parseInt(h.fecha?.slice(0,4))||h.año;
   h.mes=parseInt(h.fecha?.slice(5,7))||h.mes;
-  // Feedback visual
-  $('mod-status').textContent='✓ Cambio guardado en sesión';
-  $('mod-status').style.color='var(--green)';
-  // Nota: para persistir en SQLite se necesita el backend
-  // Por ahora actualiza en memoria y refleja en el historial
-  setTimeout(()=>{closeMod();filtH();},600);
+  if(h.planilla==='casa'&&h.tipo==='gasto') h.reembolsado=parseInt($('ereembolso').value)||0;
+  // Persistir en Supabase
+  const patch={fecha:h.fecha,monto:h.monto,planilla:h.planilla,tipo:h.tipo,
+    concepto:h.concepto,item:h.item,medio_pago:h.medio_pago,pagado_por:h.pagado_por,
+    comentario:h.comentario,reembolsado:h.reembolsado||0,año:h.año,mes:h.mes};
+  fetch(SUPABASE_URL+'/rest/v1/movimientos?id=eq.'+editId,{
+    method:'PATCH',headers:{...sbH,'Content-Type':'application/json','Prefer':'return=minimal'},
+    body:JSON.stringify(patch)
+  }).then(r=>{
+    if(r.ok){
+      $('mod-status').textContent='✓ Guardado en Supabase';
+      $('mod-status').style.color='var(--green)';
+      buildAggregatedData();
+      actualizarCxP();
+      setTimeout(()=>{closeMod();filtH();upd();},600);
+    } else {
+      $('mod-status').textContent='⚠ Error al guardar';
+      $('mod-status').style.color='var(--red)';
+    }
+  }).catch(()=>{
+    $('mod-status').textContent='⚠ Error de conexión';
+    $('mod-status').style.color='var(--red)';
+  });
 }
 function togS(id){
   const body=$('sec-'+id),tog=$('tog-'+id);
@@ -2406,13 +2449,62 @@ function renderPendientes() {
   actualizarCxP();
 }
 function actualizarCxP() {
-  const pendCasa = pendientes.filter(p=>p.planilla==='casa'&&!p.reembolsado&&p.tipo==='gasto');
-  const seba = pendCasa.filter(p=>p.pagado_por==='Seba').reduce((s,p)=>s+p.monto,0);
-  const bea = pendCasa.filter(p=>p.pagado_por==='Bea').reduce((s,p)=>s+p.monto,0);
-  $('cxp-seba').textContent = seba>0?'$'+seba.toLocaleString('es-CL',{maximumFractionDigits:0}):'$0';
-  $('cxp-seba').className = seba>0?'cxp-neg':'';
-  $('cxp-bea').textContent = bea>0?'$'+bea.toLocaleString('es-CL',{maximumFractionDigits:0}):'$0';
-  $('cxp-bea').className = bea>0?'cxp-neg':'';
+  const histCasa = (D.hist||[]).filter(h=>h.planilla==='casa'&&h.tipo==='gasto'&&!h.reembolsado);
+  const histSeba = histCasa.filter(h=>h.pagado_por==='Seba').reduce((s,h)=>s+h.monto,0);
+  const histBea  = histCasa.filter(h=>h.pagado_por==='Bea').reduce((s,h)=>s+h.monto,0);
+  const pendCasa = pendientes.filter(p=>p.planilla==='casa'&&!p.reembolsado&&p.tipo==='gasto'&&!p.omitir);
+  const pendSeba = pendCasa.filter(p=>p.pagado_por==='Seba').reduce((s,p)=>s+p.monto,0);
+  const pendBea  = pendCasa.filter(p=>p.pagado_por==='Bea').reduce((s,p)=>s+p.monto,0);
+  const seba = histSeba + pendSeba;
+  const bea  = histBea  + pendBea;
+  const el = $('cxp-seba'); if(el){ el.textContent='$'+seba.toLocaleString('es-CL',{maximumFractionDigits:0}); el.className=seba>0?'cxp-neg':''; }
+  const el2 = $('cxp-bea'); if(el2){ el2.textContent='$'+bea.toLocaleString('es-CL',{maximumFractionDigits:0}); el2.className=bea>0?'cxp-neg':''; }
+  // Si el detalle está abierto, re-renderizar
+  if($('cxp-detalle')?.style.display!=='none') renderCxPDetalle();
+}
+function toggleCxP() {
+  const det = $('cxp-detalle');
+  const icon = $('cxp-toggle-icon');
+  if(!det) return;
+  const open = det.style.display==='none';
+  det.style.display = open ? 'block' : 'none';
+  if(icon) icon.textContent = open ? '▼' : '▶';
+  if(open) renderCxPDetalle();
+}
+function renderCxPDetalle() {
+  const tbody = $('cxp-detalle-body');
+  if(!tbody) return;
+  const movs = (D.hist||[])
+    .filter(h=>h.planilla==='casa'&&h.tipo==='gasto'&&!h.reembolsado)
+    .sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+  if(!movs.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="padding:12px 8px;color:var(--text3);text-align:center">Sin gastos pendientes de reembolso</td></tr>';
+    return;
+  }
+  tbody.innerHTML = movs.map(h=>`
+    <tr style="border-bottom:1px solid var(--border);color:var(--text2)" onclick="event.stopPropagation()">
+      <td style="padding:6px 8px">${h.fecha||'—'}</td>
+      <td style="padding:6px 8px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h.concepto||''} ${h.item?'· '+h.item:''}</td>
+      <td style="padding:6px 8px;color:var(--text3);font-size:11px">${h.descripcion||''}</td>
+      <td style="padding:6px 8px;text-align:right;font-family:var(--mono);color:var(--red)">$${(h.monto||0).toLocaleString('es-CL',{maximumFractionDigits:0})}</td>
+      <td style="padding:6px 8px;text-align:center"><span style="font-size:11px;padding:2px 8px;border-radius:4px;background:${h.pagado_por==='Seba'?'rgba(167,139,250,.15)':'rgba(96,165,250,.15)'};color:${h.pagado_por==='Seba'?'var(--purple)':'var(--blue)'}">${h.pagado_por||'—'}</span></td>
+      <td style="padding:6px 8px;text-align:center">
+        <button onclick="marcarReembolsado(${h.id})" style="font-size:10px;padding:3px 8px;border-radius:4px;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);cursor:pointer">✓ Saldado</button>
+      </td>
+    </tr>`).join('');
+}
+async function marcarReembolsado(id) {
+  const h = D.hist.find(x=>x.id===id);
+  if(!h) return;
+  h.reembolsado = 1;
+  try {
+    await fetch(SUPABASE_URL+'/rest/v1/movimientos?id=eq.'+id, {
+      method:'PATCH',
+      headers:{...sbH,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body:JSON.stringify({reembolsado:1})
+    });
+  } catch(e) { console.error('Error marcando reembolsado:', e); }
+  actualizarCxP();
 }
 function updatePend(id, campo, valor) {
   const p = pendientes.find(x=>String(x.id)===String(id));
