@@ -2449,11 +2449,11 @@ function renderPendientes() {
   actualizarCxP();
 }
 function actualizarCxP() {
-  // Filtrar por pagado_por — Familia = ya saldado, Seba/Bea = pendiente
-  const histCasa = (D.hist||[]).filter(h=>h.planilla==='casa'&&h.tipo==='gasto'&&(h.pagado_por==='Seba'||h.pagado_por==='Bea'));
+  // reembolsado=0 → pendiente, reembolsado=1 → saldado
+  const histCasa = (D.hist||[]).filter(h=>h.planilla==='casa'&&h.tipo==='gasto'&&!h.reembolsado&&(h.pagado_por==='Seba'||h.pagado_por==='Bea'));
   const histSeba = histCasa.filter(h=>h.pagado_por==='Seba').reduce((s,h)=>s+h.monto,0);
   const histBea  = histCasa.filter(h=>h.pagado_por==='Bea').reduce((s,h)=>s+h.monto,0);
-  const pendCasa = pendientes.filter(p=>p.planilla==='casa'&&p.tipo==='gasto'&&!p.omitir&&(p.pagado_por==='Seba'||p.pagado_por==='Bea'));
+  const pendCasa = pendientes.filter(p=>p.planilla==='casa'&&p.tipo==='gasto'&&!p.omitir&&!p.reembolsado&&(p.pagado_por==='Seba'||p.pagado_por==='Bea'));
   const pendSeba = pendCasa.filter(p=>p.pagado_por==='Seba').reduce((s,p)=>s+p.monto,0);
   const pendBea  = pendCasa.filter(p=>p.pagado_por==='Bea').reduce((s,p)=>s+p.monto,0);
   const seba = histSeba + pendSeba;
@@ -2475,7 +2475,7 @@ function renderCxPDetalle() {
   const tbody = $('cxp-detalle-body');
   if(!tbody) return;
   const movs = (D.hist||[])
-    .filter(h=>h.planilla==='casa'&&h.tipo==='gasto'&&(h.pagado_por==='Seba'||h.pagado_por==='Bea'))
+    .filter(h=>h.planilla==='casa'&&h.tipo==='gasto'&&!h.reembolsado&&(h.pagado_por==='Seba'||h.pagado_por==='Bea'))
     .sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
   if(!movs.length) {
     tbody.innerHTML = '<tr><td colspan="6" style="padding:12px 8px;color:var(--text3);text-align:center">Sin gastos pendientes de reembolso</td></tr>';
@@ -2496,12 +2496,12 @@ function renderCxPDetalle() {
 async function marcarReembolsado(id) {
   const h = D.hist.find(x=>x.id===id);
   if(!h) return;
-  h.pagado_por = 'Familia';
+  h.reembolsado = 1;
   try {
     await fetch(SUPABASE_URL+'/rest/v1/movimientos?id=eq.'+id, {
       method:'PATCH',
       headers:{...sbH,'Content-Type':'application/json','Prefer':'return=minimal'},
-      body:JSON.stringify({pagado_por:'Familia'})
+      body:JSON.stringify({reembolsado:1})
     });
   } catch(e) { console.error('Error marcando saldado:', e); }
   actualizarCxP();
