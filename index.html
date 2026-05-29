@@ -789,7 +789,9 @@ async function bootApp(){
     }
     setLoadProgress(70);
     D.hist=all;
-    buildAggregatedData();
+    // Normalizar reembolsado a número
+      D.hist.forEach(h=>{ h.reembolsado = esReembolsado(h.reembolsado) ? 1 : 0; });
+      buildAggregatedData();
     setLoadProgress(95);
     setTimeout(async ()=>{hideLoading();initSel();initHistSel();upd();filtH();await cargarPendientesSB();renderPendientes();actualizarCxP();},200);
   }catch(e){
@@ -824,6 +826,8 @@ function prevM(m){const[y,mo]=m.split('-').map(Number);return mo===1?(y-1)+'-12'
 // ── STATE ─────────────────────────────────────────────────────────
 let planilla='personal', mes='2026-04';
 let CH={}, CV={}, editId=null, histFiltered=[], histSortDesc=true;
+// reembolsado viene como string '0'/'1' o number 0/1 desde Supabase
+function esReembolsado(v) { return v===1||v==='1'||v===true; }
 let activeFilter=null;
 let expandedConcepts={};
 let pnlOrden={'personal':null,'casa':null};
@@ -1862,7 +1866,7 @@ function openMod(id){
   // Mostrar campo reembolsado solo para gastos de Casa
   const esCasaGasto = (h.planilla==='casa' && h.tipo==='gasto');
   $('ereembolso-row').style.display = esCasaGasto ? '' : 'none';
-  if(esCasaGasto) $('ereembolso').value = h.reembolsado ? '1' : '0';
+  if(esCasaGasto) $('ereembolso').value = esReembolsado(h.reembolsado) ? '1' : '0';
   $('modal').classList.add('show');
 }
 function closeMod(){$('modal').classList.remove('show');editId=null;}
@@ -2450,10 +2454,10 @@ function renderPendientes() {
 }
 function actualizarCxP() {
   // reembolsado=0 → pendiente, reembolsado=1 → saldado
-  const histCasa = (D.hist||[]).filter(h=>h.planilla==='casa'&&h.tipo==='gasto'&&!h.reembolsado&&(h.pagado_por==='Seba'||h.pagado_por==='Bea'));
+  const histCasa = (D.hist||[]).filter(h=>h.planilla==='casa'&&h.tipo==='gasto'&&!esReembolsado(h.reembolsado)&&(h.pagado_por==='Seba'||h.pagado_por==='Bea'));
   const histSeba = histCasa.filter(h=>h.pagado_por==='Seba').reduce((s,h)=>s+h.monto,0);
   const histBea  = histCasa.filter(h=>h.pagado_por==='Bea').reduce((s,h)=>s+h.monto,0);
-  const pendCasa = pendientes.filter(p=>p.planilla==='casa'&&p.tipo==='gasto'&&!p.omitir&&!p.reembolsado&&(p.pagado_por==='Seba'||p.pagado_por==='Bea'));
+  const pendCasa = pendientes.filter(p=>p.planilla==='casa'&&p.tipo==='gasto'&&!p.omitir&&!esReembolsado(p.reembolsado)&&(p.pagado_por==='Seba'||p.pagado_por==='Bea'));
   const pendSeba = pendCasa.filter(p=>p.pagado_por==='Seba').reduce((s,p)=>s+p.monto,0);
   const pendBea  = pendCasa.filter(p=>p.pagado_por==='Bea').reduce((s,p)=>s+p.monto,0);
   const seba = histSeba + pendSeba;
@@ -2475,7 +2479,7 @@ function renderCxPDetalle() {
   const tbody = $('cxp-detalle-body');
   if(!tbody) return;
   const movs = (D.hist||[])
-    .filter(h=>h.planilla==='casa'&&h.tipo==='gasto'&&!h.reembolsado&&(h.pagado_por==='Seba'||h.pagado_por==='Bea'))
+    .filter(h=>h.planilla==='casa'&&h.tipo==='gasto'&&!esReembolsado(h.reembolsado)&&(h.pagado_por==='Seba'||h.pagado_por==='Bea'))
     .sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
   if(!movs.length) {
     tbody.innerHTML = '<tr><td colspan="6" style="padding:12px 8px;color:var(--text3);text-align:center">Sin gastos pendientes de reembolso</td></tr>';
