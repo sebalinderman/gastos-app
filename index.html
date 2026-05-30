@@ -2476,6 +2476,11 @@ function renderPendientes() {
               onchange="updatePend('${p.id}','item',this.value)">
             <datalist id="ilist-${p.id}">${itemsList.map(i=>`<option value="${i}">`).join('')}</datalist>
           </div>
+          <div class="pf" style="min-width:160px;flex:1"><label>Comentario</label>
+            <input type="text" value="${(p.descripcion||'').replace(/"/g,'&quot;')}"
+              onchange="updatePend('${p.id}','descripcion',this.value)"
+              style="width:100%">
+          </div>
           ${esCasa?`
           <div class="pf" style="min-width:90px"><label>Pagado por</label>
             <select onchange="updatePend('${p.id}','pagado_por',this.value)">
