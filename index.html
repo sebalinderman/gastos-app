@@ -763,7 +763,7 @@ async function confirmarTodosBackend(movs){
       subtipo: m.subtipo||null,
       comentario: m.descripcion||null,
       pagado_por: m.pagado_por||null,
-      reembolsado: m.reembolsado||0,
+      reembolsado: String(m.reembolsado||0),
       medio_pago: m.medio_pago||null,
     }));
     const res = await sbPost('movimientos', payload);
