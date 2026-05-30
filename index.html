@@ -837,6 +837,7 @@ let pendientes=[], gestPlanilla='personal', gestConcepto=null, gestItem=null;
 // ── COLA PENDIENTES EN SUPABASE ───────────────────────────────────
 async function guardarPendientesSB() {
   try {
+    // Borrar todos los pendientes actuales
     await fetch(SUPABASE_URL+'/rest/v1/pendientes_cola?id=neq.null', {method:'DELETE', headers:sbH});
     if(pendientes.length === 0) return;
     const rows = pendientes.map(p => ({
@@ -854,7 +855,12 @@ async function guardarPendientesSB() {
       omitir: p.omitir || false,
       posible_dup: p.posible_dup ? JSON.stringify(p.posible_dup) : null,
     }));
-    await sbPost('pendientes_cola', rows);
+    // Usar upsert para evitar conflictos de ID
+    await fetch(SUPABASE_URL+'/rest/v1/pendientes_cola', {
+      method: 'POST',
+      headers: {...sbH, 'Content-Type':'application/json', 'Prefer':'resolution=merge-duplicates'},
+      body: JSON.stringify(rows)
+    });
   } catch(e) { console.error('Error guardando pendientes:', e); }
 }
 async function cargarPendientesSB() {
@@ -2588,17 +2594,20 @@ function limpiarPendientes() {
   pendientes = [];
   renderPendientes();
 }
-function confirmarTodos() {
+async function confirmarTodos() {
   const aConfirmar = pendientes.filter(p=>!p.posible_dup && !p.omitir);
   if(!aConfirmar.length) {
     alert('Resuelve los posibles duplicados antes de confirmar.');
     return;
   }
-  // Agregar al historial en memoria
+  // Guardar en Supabase primero
+  const ids = await confirmarTodosBackend(aConfirmar);
+  // Agregar al historial en memoria con IDs reales de Supabase
   let nextId = Math.max(...D.hist.map(h=>h.id),0)+1;
-  for(const p of aConfirmar) {
+  for(let i=0; i<aConfirmar.length; i++) {
+    const p = aConfirmar[i];
     D.hist.unshift({
-      id: nextId++,
+      id: ids[i] || nextId++,
       fecha: p.fecha,
       año: parseInt(p.fecha?.slice(0,4)),
       mes: parseInt(p.fecha?.slice(5,7)),
@@ -2610,10 +2619,11 @@ function confirmarTodos() {
       medio_pago: null,
       comentario: p.descripcion,
       pagado_por: p.pagado_por,
+      reembolsado: p.reembolsado || 0,
     });
   }
   pendientes = pendientes.filter(p=>p.posible_dup || p.omitir);
-  guardarPendientesSB();
+  await guardarPendientesSB();
   renderPendientes();
   buildAggregatedData();
   initSel();
@@ -2621,9 +2631,8 @@ function confirmarTodos() {
   upd();
   filtH();
   actualizarCxP();
-  // Feedback
   const n = aConfirmar.length;
-  alert(`✓ ${n} movimiento${n>1?'s':''} guardado${n>1?'s':''} en el historial.`);
+  alert(`✓ ${n} movimiento${n>1?'s':''} guardado${n>1?'s':''} en Supabase.`);
 }
 function openGest() { $('gest-modal').classList.add('show'); renderGest(); }
 function closeGest() { $('gest-modal').classList.remove('show'); }
