@@ -1773,18 +1773,23 @@ function makePnlClickable(tblId, pl) {
 }
 function initSel(){
   const sel=$('sel-mes');
-  Object.keys(D.pm).sort().reverse().slice(0,18).forEach(m=>{
+  const valorActual = sel.value; // preservar selección actual si existe
+  sel.innerHTML = ''; // limpiar para regenerar
+  const meses=[...new Set(D.hist.map(h=>h.año+'-'+String(h.mes).padStart(2,'0')))].filter(Boolean).sort().reverse();
+  meses.forEach(m=>{
     const o=document.createElement('option');
     o.value=m;o.textContent=mlbl(m);
-    if(m==='2026-04')o.selected=true;
     sel.appendChild(o);
   });
+  // Seleccionar el valor anterior si existe, si no el más reciente
+  if(valorActual && meses.includes(valorActual)) sel.value=valorActual;
+  else if(meses.length) sel.value=meses[0];
 }
 function initHistSel(){
-  const meses=[...new Set(D.hist.map(h=>h.año+'-'+String(h.mes).padStart(2,'0')))].sort().reverse();
-  meses.forEach(m=>{$('hm').innerHTML+=`<option value="${m}">${mlbl(m)}</option>`});
+  const meses=[...new Set(D.hist.map(h=>h.año+'-'+String(h.mes).padStart(2,'0')).filter(Boolean))].sort().reverse();
+  $('hm').innerHTML='<option value="">Todos los meses</option>'+meses.map(m=>`<option value="${m}">${mlbl(m)}</option>`).join('');
   const cs=[...new Set(D.hist.map(h=>h.concepto).filter(Boolean))].sort();
-  cs.forEach(c=>{$('hc').innerHTML+=`<option value="${c}">${c}</option>`});
+  $('hc').innerHTML='<option value="">Todos</option>'+cs.map(c=>`<option value="${c}">${c}</option>`).join('');
 }
 function filtH(){
   const q=$('hq').value.toLowerCase();
@@ -2588,8 +2593,14 @@ function confirmarTodos() {
     });
   }
   pendientes = pendientes.filter(p=>p.posible_dup || p.omitir);
+  guardarPendientesSB();
   renderPendientes();
+  buildAggregatedData();
+  initSel();
+  initHistSel();
+  upd();
   filtH();
+  actualizarCxP();
   // Feedback
   const n = aConfirmar.length;
   alert(`✓ ${n} movimiento${n>1?'s':''} guardado${n>1?'s':''} en el historial.`);
