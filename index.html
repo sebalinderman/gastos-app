@@ -667,6 +667,34 @@ Ejemplos:
 </div>
 
 
+<!-- Modal Medio de Pago / Pagado Por -->
+<div class="overlay" id="modal-batch">
+  <div class="modal" style="width:420px" onclick="event.stopPropagation()">
+    <h3>Datos del batch</h3>
+    <div class="frow" style="margin-bottom:12px">
+      <label style="font-size:11px;color:var(--text3);font-family:var(--mono);text-transform:uppercase">Medio de Pago</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select id="batch-medio" style="flex:1">
+          <option value="">— elegir —</option>
+        </select>
+        <button class="btn btn-g" style="padding:4px 8px;font-size:12px" onclick="agregarMedioPago()">+</button>
+      </div>
+    </div>
+    <div class="frow" style="margin-bottom:18px">
+      <label style="font-size:11px;color:var(--text3);font-family:var(--mono);text-transform:uppercase">Pagado por</label>
+      <select id="batch-pagado">
+        <option value="Seba">Seba</option>
+        <option value="Bea">Bea</option>
+        <option value="Familia">Familia (ya saldado)</option>
+      </select>
+    </div>
+    <div class="mbtns">
+      <button class="btn btn-g" onclick="$('modal-batch').classList.remove('show')">Cancelar</button>
+      <button class="btn btn-s" onclick="confirmarBatch()">Continuar →</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="modal">
   <div class="modal" style="width:500px">
     <h3>Editar movimiento <span id="mod-id" style="font-size:11px;color:var(--text3);font-weight:400"></span></h3>
@@ -815,7 +843,7 @@ async function bootApp(){
       D.hist.forEach(h=>{ h.reembolsado = esReembolsado(h.reembolsado) ? 1 : 0; });
       buildAggregatedData();
     setLoadProgress(95);
-    setTimeout(async ()=>{hideLoading();initSel();initHistSel();upd();filtH();await cargarPendientesSB();renderPendientes();actualizarCxP();},200);
+    setTimeout(async ()=>{hideLoading();initSel();initHistSel();upd();filtH();await cargarPendientesSB();await cargarMediosPago();renderPendientes();actualizarCxP();},200);
   }catch(e){
     hideLoading();
     document.body.innerHTML+='<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#0D0D0D;flex-direction:column;gap:12px"><div style="color:#F87171;font-size:14px">Error conectando con Supabase</div><div style="color:#505050;font-size:12px">'+e.message+'</div><button onclick="bootApp()" style="background:#60A5FA;color:#000;border:none;padding:8px 16px;border-radius:8px;cursor:pointer">Reintentar</button></div>';
@@ -848,6 +876,16 @@ function prevM(m){const[y,mo]=m.split('-').map(Number);return mo===1?(y-1)+'-12'
 // ── STATE ─────────────────────────────────────────────────────────
 let planilla='personal', mes='2026-04';
 let CH={}, CV={}, editId=null, histFiltered=[], histSortDesc=true;
+let mediosPago = ['TC Santander','CC Santander','CC Familia','TC BCI','CC BCI','Splitwise','Otros'];
+async function cargarMediosPago() {
+  try {
+    const rows = await sbGet('medios_pago','order=nombre.asc');
+    if(rows && rows.length) mediosPago = rows.map(r=>r.nombre);
+  } catch(e) {}
+}
+async function guardarMedioPago(nombre) {
+  try { await sbPost('medios_pago',[{nombre}]); mediosPago.push(nombre); } catch(e) {}
+}
 // reembolsado viene como string '0'/'1' o number 0/1 desde Supabase
 function esReembolsado(v) { return v===1||v==='1'||v===true; }
 let activeFilter=null;
@@ -2308,14 +2346,12 @@ El monto es SIEMPRE positivo (valor absoluto). Si no hay fecha clara usa null.`}
       const movs = JSON.parse(txt.replace(/\`\`\`json?|\`\`\`/g,'').trim());
       const banco = 'otro';
       const planDef = $('src-planilla-default')?.value || 'auto';
-      for(const mov of movs) {
-        if(!mov.monto || mov.monto===0) continue;
-        mov.monto_original = mov.monto;
-        mov.fecha = mov.fecha || new Date().toISOString().slice(0,10);
-        const clas = clasificar(mov.descripcion, mov.monto, planDef);
-        pendientes.push(crearPendiente(mov, clas));
-      }
-      renderPendientes();
+      window._batchMovsPending = movs.filter(m=>m.monto&&m.monto!==0).map(m=>({
+        ...m, monto_original:m.monto,
+        fecha: m.fecha||new Date().toISOString().slice(0,10)
+      }));
+      window._batchPlanDef = planDef;
+      abrirModalBatch();
     } catch(e) {
       alert('Error procesando imagen. Prueba pegando el texto manualmente.');
     }
@@ -2351,14 +2387,12 @@ Monto siempre positivo. Incluye tanto cargos como abonos.`}
       const txt = data.content?.find(b=>b.type==='text')?.text||'[]';
       const movs = JSON.parse(txt.replace(/\`\`\`json?|\`\`\`/g,'').trim());
       const planDef = $('src-planilla-default')?.value || 'auto';
-      for(const mov of movs) {
-        if(!mov.monto || mov.monto===0) continue;
-        mov.monto_original = mov.monto;
-        mov.fecha = mov.fecha || new Date().toISOString().slice(0,10);
-        const clas = clasificar(mov.descripcion, mov.monto, planDef);
-        pendientes.push(crearPendiente(mov, clas));
-      }
-      renderPendientes();
+      window._batchMovsPending = movs.filter(m=>m.monto&&m.monto!==0).map(m=>({
+        ...m, monto_original:m.monto,
+        fecha: m.fecha||new Date().toISOString().slice(0,10)
+      }));
+      window._batchPlanDef = planDef;
+      abrirModalBatch();
     } catch(e) {
       alert('Error procesando PDF.');
     }
@@ -2366,6 +2400,45 @@ Monto siempre positivo. Incluye tanto cargos como abonos.`}
     input.value='';
   };
   reader.readAsDataURL(file);
+}
+function abrirModalBatch() {
+  // Poblar select de medios
+  const sel = $('batch-medio');
+  sel.innerHTML = '<option value="">— elegir —</option>' +
+    mediosPago.map(m=>`<option value="${m}">${m}</option>`).join('');
+  $('modal-batch').classList.add('show');
+}
+function confirmarBatch() {
+  const medio = $('batch-medio').value;
+  const pagadoPor = $('batch-pagado').value;
+  const planDef = window._batchPlanDef || 'auto';
+  const movs = window._batchMovsPending || [];
+  $('modal-batch').classList.remove('show');
+  for(const mov of movs) {
+    const clas = clasificar(mov.descripcion, mov.monto, planDef);
+    const p = crearPendiente(mov, clas);
+    p.medio_pago = medio || null;
+    // Pagado por override solo si es casa
+    if(p.planilla === 'casa') {
+      p.pagado_por = pagadoPor;
+      p.reembolsado = pagadoPor === 'Familia' ? 1 : 0;
+    }
+    pendientes.push(p);
+  }
+  window._batchMovsPending = [];
+  renderPendientes();
+}
+async function agregarMedioPago() {
+  const nombre = prompt('Nombre del nuevo medio de pago:');
+  if(!nombre || !nombre.trim()) return;
+  const n = nombre.trim();
+  if(mediosPago.includes(n)) { alert('Ya existe'); return; }
+  await guardarMedioPago(n);
+  // Actualizar select
+  const sel = $('batch-medio');
+  const opt = document.createElement('option');
+  opt.value = n; opt.textContent = n; opt.selected = true;
+  sel.appendChild(opt);
 }
 function agregarManual() {
   const planilla = $('man-planilla').value;
