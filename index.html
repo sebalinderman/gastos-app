@@ -715,6 +715,7 @@ Ejemplos:
     <div id="mod-status" style="font-size:11px;color:var(--green);margin-top:8px;min-height:16px"></div>
     <div class="mbtns">
       <button class="btn btn-g" onclick="closeMod()">Cancelar</button>
+      <button class="btn" style="background:var(--red);color:#fff;margin-right:auto" onclick="eliminarMov()">🗑 Eliminar</button>
       <button class="btn btn-s" onclick="saveMod()">Guardar cambio</button>
     </div>
   </div>
@@ -1875,6 +1876,25 @@ function openMod(id){
   $('modal').classList.add('show');
 }
 function closeMod(){$('modal').classList.remove('show');editId=null;}
+async function eliminarMov() {
+  if(!editId) return;
+  if(!confirm('¿Eliminar este movimiento? Esta acción no se puede deshacer.')) return;
+  try {
+    await fetch(SUPABASE_URL+'/rest/v1/movimientos?id=eq.'+editId, {
+      method:'DELETE', headers:{...sbH,'Prefer':'return=minimal'}
+    });
+    D.hist = D.hist.filter(h=>h.id!==editId);
+    buildAggregatedData();
+    initSel();
+    initHistSel();
+    upd();
+    filtH();
+    actualizarCxP();
+    closeMod();
+  } catch(e) {
+    alert('Error al eliminar: '+e.message);
+  }
+}
 function saveMod(){
   const h=D.hist.find(x=>x.id===editId);if(!h)return;
   h.fecha=$('ef').value;
