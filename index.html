@@ -744,12 +744,32 @@ const SUPABASE_KEY='sb_publishable_trd6VNRXK2SqPvWWxy189A_nOcw9n5e';
 const sbH={'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'return=representation'};
 
 async function sbGet(t,p=''){const r=await fetch(SUPABASE_URL+'/rest/v1/'+t+'?'+p,{headers:sbH});if(!r.ok)throw new Error('SB '+r.status);return r.json();}
-async function sbPost(t,b){const r=await fetch(SUPABASE_URL+'/rest/v1/'+t,{method:'POST',headers:sbH,body:JSON.stringify(b)});if(!r.ok)throw new Error('SB '+r.status);return r.json();}
+async function sbPost(t,b){const r=await fetch(SUPABASE_URL+'/rest/v1/'+t,{method:'POST',headers:{...sbH,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify(b)});if(!r.ok)throw new Error('SB '+r.status);return r.json();}
 async function sbPatch(t,id,b){const r=await fetch(SUPABASE_URL+'/rest/v1/'+t+'?id=eq.'+id,{method:'PATCH',headers:sbH,body:JSON.stringify(b)});return r.json();}
 async function sbPatchWhere(t,w,b){const r=await fetch(SUPABASE_URL+'/rest/v1/'+t+'?'+w,{method:'PATCH',headers:sbH,body:JSON.stringify(b)});return r.json();}
 
 async function saveModBackend(id,d){try{await sbPatch('movimientos',id,d);}catch(e){console.error(e);}}
-async function confirmarTodosBackend(movs){try{const res=await sbPost('movimientos',movs.map(m=>({fecha:m.fecha,año:parseInt(m.fecha?.slice(0,4)),mes:parseInt(m.fecha?.slice(5,7)),planilla:m.planilla||'personal',concepto:m.concepto,item:m.item,monto:m.monto||0,tipo:m.tipo||'gasto',comentario:m.descripcion,pagado_por:m.pagado_por})));return res.map(r=>r.id);}catch(e){return[];}}
+async function confirmarTodosBackend(movs){
+  try{
+    const payload = movs.map(m=>({
+      fecha: m.fecha,
+      año: parseInt(m.fecha?.slice(0,4)),
+      mes: parseInt(m.fecha?.slice(5,7)),
+      planilla: m.planilla||'personal',
+      concepto: m.concepto||null,
+      item: m.item||null,
+      monto: m.monto||0,
+      tipo: m.tipo||'gasto',
+      subtipo: m.subtipo||null,
+      comentario: m.descripcion||null,
+      pagado_por: m.pagado_por||null,
+      reembolsado: m.reembolsado||0,
+      medio_pago: m.medio_pago||null,
+    }));
+    const res = await sbPost('movimientos', payload);
+    return res.map(r=>r.id);
+  }catch(e){console.error('Error confirmarTodosBackend:',e);return[];}
+}
 async function bulkRenameBackend(tipo,pl,viejo,nuevo,conc){try{if(tipo==='concepto')await sbPatchWhere('movimientos','planilla=eq.'+pl+'&concepto=eq.'+encodeURIComponent(viejo),{concepto:nuevo});else await sbPatchWhere('movimientos','planilla=eq.'+pl+'&concepto=eq.'+encodeURIComponent(conc)+'&item=eq.'+encodeURIComponent(viejo),{item:nuevo});}catch(e){console.error(e);}}
 
 // ── BUILD DATA ────────────────────────────────────────────────────
