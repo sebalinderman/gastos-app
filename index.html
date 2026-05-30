@@ -752,6 +752,7 @@ async function saveModBackend(id,d){try{await sbPatch('movimientos',id,d);}catch
 async function confirmarTodosBackend(movs){
   try{
     const payload = movs.map(m=>({
+      id: parseInt(m.id),
       fecha: m.fecha,
       año: parseInt(m.fecha?.slice(0,4)),
       mes: parseInt(m.fecha?.slice(5,7)),
