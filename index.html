@@ -918,6 +918,8 @@ async function guardarPendientesSB() {
       concepto: p.concepto,
       item: p.item,
       tipo: p.tipo,
+      subtipo: p.subtipo || null,
+      medio_pago: p.medio_pago || null,
       pagado_por: p.pagado_por,
       reembolsado: p.reembolsado || 0,
       omitir: p.omitir || false,
@@ -1356,8 +1358,9 @@ function renderGop(){
 
   const vals=M.map(m=>Object.values(D.gastos_op[m]||{}).reduce((s,v)=>s+v,0)).filter(v=>v>0);
   $('meta-gop').textContent='Promedio op.: '+fk(vals.reduce((s,v)=>s+v,0)/vals.length)+' / mes';
-  // Trigger resize para que Chart.js recalcule dimensiones
+  // Trigger resize y click
   setTimeout(()=>{if(CH.gop)CH.gop.resize();},50);
+  addChartClickMes('c-gop', M, 'personal');
 }
 function renderIng(){
   const M=getMesesToShow(D.meses_all||Object.keys(D.pm).sort());
@@ -1379,6 +1382,7 @@ function renderIng(){
   });
   const s=sueldo.filter(v=>v>0);
   $('meta-ing').textContent='Sueldo promedio: '+fk(s.reduce((a,b)=>a+b,0)/s.length);
+  addChartClickMes('c-ing', M, 'personal');
 }
 function renderExtr(){
   const M=getMesesToShow(D.meses_all||Object.keys(D.pm).sort());
@@ -1526,6 +1530,7 @@ function renderDep(){
   });
   const avg2=netos.filter(v=>v!==0);
   $('meta-dep').textContent='Neto prop. promedio: '+fclp(avg2.reduce((s,v)=>s+v,0)/avg2.length)+' / mes';
+  addDepClick('c-dep', M);
 }
 function renderInv(){
   const M=getMesesToShow(D.meses_all||Object.keys(D.pm).sort());
@@ -1571,6 +1576,7 @@ function renderInv(){
   const totAp=M.reduce((s,m)=>s+Object.values(D.inversiones_ent[m]?.aportes||{}).reduce((a,b)=>a+b,0),0);
   const totRe=M.reduce((s,m)=>s+Object.values(D.inversiones_ent[m]?.rescates||{}).reduce((a,b)=>a+b,0),0);
   $('meta-inv').textContent='Aportes: '+fk(totAp)+' | Rescates: '+fk(totRe)+' | Neto: '+fk(totAp-totRe);
+  addInvClick('c-inv', M);
 }
 function togCat(key,idx,isCasa){
   CV[key]=!CV[key];
@@ -1621,6 +1627,7 @@ function renderGopCasa(){
   });
   const vals=M.map(m=>Object.values(D.gastos_casa[m]?.sin_ocio||{}).reduce((s,v)=>s+v,0)).filter(v=>v>0);
   $('meta-gop-casa').textContent='Promedio sin ocio: '+fk(vals.reduce((s,v)=>s+v,0)/vals.length)+' / mes';
+  addChartClickMes('c-gop-casa', M, 'casa');
 }
 function renderOcioCasa(){
   const M=getMesesToShow(D.meses_all_casa||[]);
@@ -1641,6 +1648,7 @@ function renderOcioCasa(){
   });
   const vals=M.map(m=>Object.values(D.gastos_casa[m]?.ocio||{}).reduce((s,v)=>s+v,0)).filter(v=>v>0);
   $('meta-ocio-casa').textContent='Promedio ocio: '+fk(vals.length?vals.reduce((s,v)=>s+v,0)/vals.length:0)+' / mes';
+  addChartClickMes('c-ocio-casa', M, 'casa');
 }
 function renderAportesCasa(){
   const M=getMesesToShow(D.meses_all_casa||[]);
@@ -1678,6 +1686,7 @@ function renderAportesCasa(){
   });
   const neg=M.filter(m=>(D.pnl_casa[m]?.saldo||0)<0).length;
   $('meta-aportes-casa').textContent=neg+' de '+M.length+' meses con saldo negativo';
+  addChartClickMes('c-aportes-casa', M, 'casa');
 }
 function applyFilter(f) {
   activeFilter = f;
@@ -1727,11 +1736,12 @@ function addChartClickMes(chartId, mesesArr, pl) {
     });
   };
 }
-function addInvClick(chartId) {
+function addInvClick(chartId, mesesArr) {
   const canvas = $(chartId);
   if(!canvas) return;
   canvas.classList.add('chart-clickable');
   canvas.title = 'Click para filtrar historial por entidad/mes. Ctrl+click = solo entidad';
+  const _im = mesesArr || D.meses_18;
   canvas.onclick = (e) => {
     const ch = CH.inv;
     if(!ch) return;
@@ -1740,7 +1750,7 @@ function addInvClick(chartId) {
     const ds = ch.data.datasets[pts[0].datasetIndex];
     const mesIdx = pts[0].index;
     const entidad = ds.label;
-    const mesLabel = D.meses_18[mesIdx];
+    const mesLabel = _im[mesIdx];
     if(!mesLabel) return;
     // Para inversiones: filtrar por comentario que contiene la entidad
     // O filtrar por concepto='Inversiones' + mes
@@ -1770,17 +1780,18 @@ function addInvClick(chartId) {
     }
   };
 }
-function addDepClick(chartId) {
+function addDepClick(chartId, mesesArr) {
   const canvas = $(chartId);
   if(!canvas) return;
   canvas.classList.add('chart-clickable');
   canvas.title = 'Click para ver movimientos de deptos ese mes';
+  const _dm = mesesArr || D.meses_18;
   canvas.onclick = (e) => {
     const ch = CH.dep;
     if(!ch) return;
     const pts = ch.getElementsAtEventForMode(e,'nearest',{intersect:false},true);
     if(!pts.length) return;
-    const mesLabel = D.meses_18[pts[0].index];
+    const mesLabel = _dm[pts[0].index];
     if(!mesLabel) return;
     // Filtrar por arriendos + hipotecarios de ese mes
     activeFilter = {
@@ -1865,35 +1876,6 @@ function initHistSel(){
   $('hm').innerHTML='<option value="">Todos los meses</option>'+meses.map(m=>`<option value="${m}">${mlbl(m)}</option>`).join('');
   const cs=[...new Set(D.hist.map(h=>h.concepto).filter(Boolean))].sort();
   $('hc').innerHTML='<option value="">Todos</option>'+cs.map(c=>`<option value="${c}">${c}</option>`).join('');
-}
-function filtH(){
-  const q=$('hq').value.toLowerCase();
-  const tp=$('ht').value,pl=$('hp').value,mm=$('hm').value,cc2=$('hc').value;
-  histFiltered=D.hist.filter(h=>{
-    if(tp&&h.tipo!==tp)return false;
-    if(pl&&h.planilla!==pl)return false;
-    if(mm&&(h.año+'-'+String(h.mes).padStart(2,'0'))!==mm)return false;
-    if(cc2&&h.concepto!==cc2)return false;
-    if(q&&!(h.concepto+' '+(h.item||'')+' '+(h.comentario||'')+' '+h.planilla).toLowerCase().includes(q))return false;
-    return true;
-  });
-  histFiltered.sort((a,b)=>histSortDesc?(b.fecha||'').localeCompare(a.fecha||''):(a.fecha||'').localeCompare(b.fecha||''));
-  $('hist-cnt').textContent=histFiltered.length+' movimientos';
-  const tbody=$('hbody');
-  if(!histFiltered.length){tbody.innerHTML=`<tr><td colspan="8" style="text-align:center;padding:28px;color:var(--text3)">Sin resultados</td></tr>`;return;}
-  tbody.innerHTML=histFiltered.slice(0,500).map(h=>`
-    <tr style="border-bottom:1px solid var(--border)">
-      <td style="font-family:var(--mono);font-size:11px;color:var(--text3)">${h.fecha||'—'}</td>
-      <td><span class="badge bt-${h.planilla==='personal'?'p':'c'}">${h.planilla==='personal'?'Seba':'Casa'}</span></td>
-      <td><span class="badge bt-${h.tipo}">${{'gasto':'Gasto','ingreso':'Ingreso','inversion':'Inv.','devolucion':'Dev.','transferencia_interna':'Transf.'}[h.tipo]||h.tipo}</span></td>
-      <td style="text-align:left;color:var(--text)">${h.concepto||'—'}${h.item?` <span style="color:var(--text3)">/ ${h.item}</span>`:''}</td>
-      <td style="text-align:right;color:${h.tipo==='gasto'?'var(--red)':h.tipo==='ingreso'?'var(--green)':'var(--text2)'}">${fabs(h.monto)}</td>
-      <td style="text-align:left;color:var(--text3)">${h.medio_pago||h.pagado_por||'—'}</td>
-      <td style="text-align:left;color:var(--text3);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(h.comentario||'').replace(/"/g,"'")}">${h.comentario||'—'}</td>
-      <td style="white-space:nowrap">
-        <button class="ebtn" onclick="openMod(${h.id})" title="Editar">✎</button>
-      </td>
-    </tr>`).join('');
 }
 function toggleSortFecha(){
   histSortDesc=!histSortDesc;
@@ -1989,17 +1971,15 @@ function saveMod(){
   h.comentario=$('eco').value||null;
   h.año=parseInt(h.fecha?.slice(0,4))||h.año;
   h.mes=parseInt(h.fecha?.slice(5,7))||h.mes;
-  const nuevoPagadoPor = $('epag').value||null;
-  h.pagado_por = nuevoPagadoPor;
-  h.medio_pago = $('emed').value||null;
   if(h.planilla==='casa'&&h.tipo==='gasto') {
-    if(nuevoPagadoPor==='Familia') h.reembolsado=1;
+    if(h.pagado_por==='Familia') h.reembolsado=1;
     else h.reembolsado=parseInt($('ereembolso').value)||0;
   }
   // Persistir en Supabase
   const patch={fecha:h.fecha,monto:h.monto,planilla:h.planilla,tipo:h.tipo,
-    concepto:h.concepto,item:h.item,medio_pago:h.medio_pago,pagado_por:h.pagado_por,
-    comentario:h.comentario,reembolsado:h.reembolsado||0,año:h.año,mes:h.mes};
+    subtipo:h.subtipo||null,concepto:h.concepto,item:h.item,
+    medio_pago:h.medio_pago,pagado_por:h.pagado_por,
+    comentario:h.comentario,reembolsado:String(h.reembolsado||0),año:h.año,mes:h.mes};
   fetch(SUPABASE_URL+'/rest/v1/movimientos?id=eq.'+editId,{
     method:'PATCH',headers:{...sbH,'Content-Type':'application/json','Prefer':'return=minimal'},
     body:JSON.stringify(patch)
@@ -2008,6 +1988,7 @@ function saveMod(){
       $('mod-status').textContent='✓ Guardado en Supabase';
       $('mod-status').style.color='var(--green)';
       buildAggregatedData();
+      initSel();initHistSel();
       actualizarCxP();
       setTimeout(()=>{closeMod();filtH();upd();},600);
     } else {
@@ -2064,11 +2045,10 @@ function upd(){
   renderCards();
   if(planilla==='personal'){
     renderGop();
-    if($('sec-extr')&&$('sec-extr').classList.contains('open'))renderExtr();
+    renderExtr();
     if($('sec-ing').classList.contains('open'))renderIng();
     if($('sec-dep').classList.contains('open'))renderDep();
     if($('sec-inv').classList.contains('open'))renderInv();
-    renderExtr();
     if($('sec-pnl').classList.contains('open'))renderPnl();
   } else {
     renderGopCasa();
@@ -2257,7 +2237,7 @@ function clasificar(desc, monto, bancoPlanilla) {
 
   // Hipotecarios Coopeuch → Inversiones (ítem pendiente de selección)
   if(/PAGO COOPEUCH|COOPEUCH/.test(d)) {
-    return { planilla:'personal', tipo:'inversion', concepto:'Inversiones', item:null };
+    return { planilla:'personal', tipo:'inversion', subtipo:'hipotecario', concepto:'Inversiones', item:null };
   }
 
   // Ingresos: transferencias recibidas con monto positivo
@@ -2275,8 +2255,10 @@ function clasificar(desc, monto, bancoPlanilla) {
   for(const r of REGLAS) {
     if(new RegExp(r.patron,'i').test(d)) {
       const planilla = bancoPlanilla!=='auto' ? bancoPlanilla : (r.planilla||'personal');
-      const tipo = r.concepto==='transferencia_interna'?'transferencia_interna':'gasto';
-      return { planilla, tipo, concepto: r.concepto, item: r.item };
+      const tipo = r.concepto==='transferencia_interna'?'transferencia_interna':
+                   r.concepto==='Inversiones'?'inversion':'gasto';
+      const rSubtipo = r.concepto==='Inversiones'?'hipotecario':null;
+      return { planilla, tipo, subtipo: rSubtipo, concepto: r.concepto, item: r.item };
     }
   }
 
@@ -2300,11 +2282,14 @@ function crearPendiente(mov, clasificacion) {
   const esBea = mov._seccionBea === true;
   const planilla = esBea ? 'casa' : (clasificacion.planilla || 'personal');
   const concepto = esBea ? (clasificacion.concepto || null) : clasificacion.concepto;
+  const tipo = clasificacion.tipo || 'gasto';
+  const subtipo = clasificacion.subtipo || (tipo === 'gasto' ? 'operacional' : null);
   return {
     id: String(Date.now()) + String(Math.floor(Math.random()*10000)),
     ...mov,
     planilla,
-    tipo: clasificacion.tipo || 'gasto',
+    tipo,
+    subtipo,
     concepto,
     item: clasificacion.item,
     pagado_por: planilla==='casa' ? 'Seba' : null,
@@ -2471,6 +2456,7 @@ function agregarManual() {
     monto_original: parseFloat($('man-monto').value)||0,
     planilla,
     tipo: $('man-tipo').value,
+    subtipo: $('man-tipo').value === 'gasto' ? 'operacional' : null,
     concepto: $('man-concepto').value || null,
     item: $('man-item').value || null,
     pagado_por: planilla==='casa'?$('man-pagado').value:null,
@@ -2641,7 +2627,7 @@ function renderCxPDetalle() {
     <tr style="border-bottom:1px solid var(--border);color:var(--text2)" onclick="event.stopPropagation()">
       <td style="padding:6px 8px">${h.fecha||'—'}</td>
       <td style="padding:6px 8px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h.concepto||''} ${h.item?'· '+h.item:''}</td>
-      <td style="padding:6px 8px;color:var(--text3);font-size:11px">${h.descripcion||''}</td>
+      <td style="padding:6px 8px;color:var(--text3);font-size:11px">${h.comentario||''}</td>
       <td style="padding:6px 8px;text-align:right;font-family:var(--mono);color:var(--red)">$${(h.monto||0).toLocaleString('es-CL',{maximumFractionDigits:0})}</td>
       <td style="padding:6px 8px;text-align:center"><span style="font-size:11px;padding:2px 8px;border-radius:4px;background:${h.pagado_por==='Seba'?'rgba(167,139,250,.15)':'rgba(96,165,250,.15)'};color:${h.pagado_por==='Seba'?'var(--purple)':'var(--blue)'}">${h.pagado_por||'—'}</span></td>
       <td style="padding:6px 8px;text-align:center">
@@ -2657,7 +2643,7 @@ async function marcarReembolsado(id) {
     await fetch(SUPABASE_URL+'/rest/v1/movimientos?id=eq.'+id, {
       method:'PATCH',
       headers:{...sbH,'Content-Type':'application/json','Prefer':'return=minimal'},
-      body:JSON.stringify({reembolsado:1})
+      body:JSON.stringify({reembolsado:'1'})
     });
   } catch(e) { console.error('Error marcando saldado:', e); }
   actualizarCxP();
@@ -2718,17 +2704,20 @@ function limpiarPendientes() {
 async function confirmarTodos() {
   const aConfirmar = pendientes.filter(p=>!p.posible_dup && !p.omitir);
   if(!aConfirmar.length) {
-    alert('Resuelve los posibles duplicados antes de confirmar.');
+    alert('No hay movimientos listos para confirmar. Resuelve o descarta los posibles duplicados.');
     return;
   }
-  // Guardar en Supabase primero
+  // Guardar en Supabase
   const ids = await confirmarTodosBackend(aConfirmar);
-  // Agregar al historial en memoria con IDs reales de Supabase
-  let nextId = Math.max(...D.hist.map(h=>h.id),0)+1;
+  if(!ids || !ids.length) {
+    alert('⚠ Error al guardar en Supabase. Los movimientos NO fueron guardados. Revisa tu conexión e intenta de nuevo.');
+    return;
+  }
+  // Agregar al historial en memoria
   for(let i=0; i<aConfirmar.length; i++) {
     const p = aConfirmar[i];
     D.hist.unshift({
-      id: ids[i] || nextId++,
+      id: ids[i],
       fecha: p.fecha,
       año: parseInt(p.fecha?.slice(0,4)),
       mes: parseInt(p.fecha?.slice(5,7)),
@@ -2737,7 +2726,8 @@ async function confirmarTodos() {
       item: p.item,
       monto: p.monto,
       tipo: p.tipo,
-      medio_pago: null,
+      subtipo: p.subtipo || null,
+      medio_pago: p.medio_pago || null,
       comentario: p.descripcion,
       pagado_por: p.pagado_por,
       reembolsado: p.reembolsado || 0,
@@ -2872,21 +2862,25 @@ function renConcepto() {
     ITEMS_DB[gestPlanilla][nuevo]=ITEMS_DB[gestPlanilla][gestConcepto];
     delete ITEMS_DB[gestPlanilla][gestConcepto];
   }
-  // Renombrar en historial
-  D.hist.forEach(h=>{if(h.planilla===gestPlanilla&&h.concepto===gestConcepto)h.concepto=nuevo;});
+  // Renombrar en historial en memoria y Supabase
+  const _oldConcepto = gestConcepto;
+  D.hist.forEach(h=>{if(h.planilla===gestPlanilla&&h.concepto===_oldConcepto)h.concepto=nuevo;});
+  bulkRenameBackend('concepto', gestPlanilla, _oldConcepto, nuevo, null);
   gestConcepto=nuevo;
   renderGest();
-  filtH(); // Actualizar historial visible
+  filtH();
 }
 function delConcepto() {
   if(!gestConcepto) return;
   const n=D.hist.filter(h=>h.planilla===gestPlanilla&&h.concepto===gestConcepto).length;
   if(n>0 && !confirm(`${n} movimientos pasarán a concepto "Otros". ¿Continuar?`)) return;
-  // Mover registros a Otros
-  D.hist.forEach(h=>{if(h.planilla===gestPlanilla&&h.concepto===gestConcepto){h.concepto='Otros';}});
+  // Mover registros a Otros en memoria y Supabase
+  const _concToDel = gestConcepto;
+  D.hist.forEach(h=>{if(h.planilla===gestPlanilla&&h.concepto===_concToDel){h.concepto='Otros';}});
+  bulkRenameBackend('concepto', gestPlanilla, _concToDel, 'Otros', null);
   // Eliminar de listas
-  CONCEPTOS_DB[gestPlanilla]=CONCEPTOS_DB[gestPlanilla].filter(c=>c!==gestConcepto);
-  delete (ITEMS_DB[gestPlanilla]||{})[gestConcepto];
+  CONCEPTOS_DB[gestPlanilla]=CONCEPTOS_DB[gestPlanilla].filter(c=>c!==_concToDel);
+  delete (ITEMS_DB[gestPlanilla]||{})[_concToDel];
   gestConcepto=null;
   renderGest();
   filtH();
@@ -2909,10 +2903,12 @@ function renItem() {
   const items=ITEMS_DB[gestPlanilla]?.[gestConcepto]||[];
   const idx=items.indexOf(gestItem);
   if(idx>=0) items[idx]=nuevo;
-  // Renombrar en historial
+  // Renombrar en historial en memoria y Supabase
+  const _oldItem=gestItem, _concForItem=gestConcepto;
   D.hist.forEach(h=>{
-    if(h.planilla===gestPlanilla&&h.concepto===gestConcepto&&h.item===gestItem) h.item=nuevo;
+    if(h.planilla===gestPlanilla&&h.concepto===_concForItem&&h.item===_oldItem) h.item=nuevo;
   });
+  bulkRenameBackend('item', gestPlanilla, _oldItem, nuevo, _concForItem);
   gestItem=nuevo;
   renderGestItems();
   filtH();
@@ -2921,19 +2917,17 @@ function delItem() {
   if(!gestConcepto||!gestItem) return;
   const n=D.hist.filter(h=>h.planilla===gestPlanilla&&h.concepto===gestConcepto&&h.item===gestItem).length;
   if(n>0&&!confirm(`${n} movimientos pasarán a ítem "Otros". ¿Continuar?`)) return;
+  const _itemToDel=gestItem, _concForDel=gestConcepto;
   D.hist.forEach(h=>{
-    if(h.planilla===gestPlanilla&&h.concepto===gestConcepto&&h.item===gestItem) h.item='Otros';
+    if(h.planilla===gestPlanilla&&h.concepto===_concForDel&&h.item===_itemToDel) h.item='Otros';
   });
-  ITEMS_DB[gestPlanilla][gestConcepto]=(ITEMS_DB[gestPlanilla][gestConcepto]||[]).filter(i=>i!==gestItem);
+  bulkRenameBackend('item', gestPlanilla, _itemToDel, 'Otros', _concForDel);
+  ITEMS_DB[gestPlanilla][_concForDel]=(ITEMS_DB[gestPlanilla][_concForDel]||[]).filter(i=>i!==_itemToDel);
   gestItem=null;
   renderGestItems();
   filtH();
 }
-function handleCellClick(td) {
-  cellClick(td.dataset.c, td.dataset.m, td.dataset.pl, td);
-}
-const _filtH_orig = filtH;
-filtH = function() {
+function filtH() {
   const q=$('hq').value.toLowerCase();
   const tp=$('ht').value, pl=$('hp').value, mm=$('hm').value, cc2=$('hc').value;
   histFiltered = D.hist.filter(h => {
@@ -2989,9 +2983,7 @@ filtH = function() {
         <button class="ebtn" onclick="openMod(${h.id})" title="Editar">✎</button>
       </td>
     </tr>`).join('');
-};
-
-
+}
 
 
 
