@@ -730,8 +730,17 @@ Ejemplos:
       </div>
     </div>
     <div class="fgrid">
-      <div class="frow"><label>Medio de pago</label><input type="text" id="emed"></div>
-      <div class="frow"><label>Pagado por</label><input type="text" id="epag"></div>
+      <div class="frow"><label>Medio de pago</label>
+        <select id="emed"><option value="">— ninguno —</option></select>
+      </div>
+      <div class="frow"><label>Pagado por</label>
+        <select id="epag">
+          <option value="">— ninguno —</option>
+          <option value="Seba">Seba</option>
+          <option value="Bea">Bea</option>
+          <option value="Familia">Familia</option>
+        </select>
+      </div>
     </div>
     <div class="frow"><label>Comentario</label><input type="text" id="eco"></div>
     <div id="ereembolso-row" class="frow" style="display:none"><label>Reembolsado</label>
@@ -1902,9 +1911,9 @@ function dlHist(){
   a.click();
 }
 function openMod(id){
-  const h=D.hist.find(x=>x.id===id);if(!h)return;
-  editId=id;
-  $('mod-id').textContent='#'+id;
+  const h=D.hist.find(x=>String(x.id)===String(id));if(!h)return;
+  editId=h.id;
+  $('mod-id').textContent='#'+h.id;
   $('mod-status').textContent='';
   $('ef').value=h.fecha||'';
   $('em').value=h.monto||0;
@@ -1912,8 +1921,15 @@ function openMod(id){
   $('et').value=h.tipo||'gasto';
   $('ec').value=h.concepto||'';
   $('ei').value=h.item||'';
-  $('emed').value=h.medio_pago||'';
-  $('epag').value=h.pagado_por||'';
+  // Poblar select medio de pago
+  const medSel=$('emed');
+  medSel.innerHTML='<option value="">— ninguno —</option>'+mediosPago.map(m=>`<option value="${m}"${h.medio_pago===m?' selected':''}>${m}</option>`).join('');
+  if(h.medio_pago && !mediosPago.includes(h.medio_pago)) {
+    medSel.innerHTML+=`<option value="${h.medio_pago}" selected>${h.medio_pago}</option>`;
+  }
+  // Poblar select pagado por
+  const pagSel=$('epag');
+  pagSel.innerHTML=['','Seba','Bea','Familia'].map(v=>`<option value="${v}"${h.pagado_por===v?' selected':''}>${v||'— ninguno —'}</option>`).join('');
   $('eco').value=h.comentario||'';
   // Poblar datalists con lista completa de conceptos
   const pl=h.planilla||'personal';
@@ -1973,7 +1989,13 @@ function saveMod(){
   h.comentario=$('eco').value||null;
   h.año=parseInt(h.fecha?.slice(0,4))||h.año;
   h.mes=parseInt(h.fecha?.slice(5,7))||h.mes;
-  if(h.planilla==='casa'&&h.tipo==='gasto') h.reembolsado=parseInt($('ereembolso').value)||0;
+  const nuevoPagadoPor = $('epag').value||null;
+  h.pagado_por = nuevoPagadoPor;
+  h.medio_pago = $('emed').value||null;
+  if(h.planilla==='casa'&&h.tipo==='gasto') {
+    if(nuevoPagadoPor==='Familia') h.reembolsado=1;
+    else h.reembolsado=parseInt($('ereembolso').value)||0;
+  }
   // Persistir en Supabase
   const patch={fecha:h.fecha,monto:h.monto,planilla:h.planilla,tipo:h.tipo,
     concepto:h.concepto,item:h.item,medio_pago:h.medio_pago,pagado_por:h.pagado_por,
@@ -2950,6 +2972,7 @@ filtH = function() {
     }
     return true;
   });
+  histFiltered.sort((a,b)=>histSortDesc?(b.fecha||'').localeCompare(a.fecha||''):(a.fecha||'').localeCompare(b.fecha||''));
   $('hist-cnt').textContent = histFiltered.length + ' movimientos';
   const tbody=$('hbody');
   if(!histFiltered.length){tbody.innerHTML=`<tr><td colspan="8" style="text-align:center;padding:28px;color:var(--text3)">Sin resultados</td></tr>`;return;}
