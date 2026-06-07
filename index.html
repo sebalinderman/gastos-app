@@ -21,6 +21,17 @@
   --font:'DM Sans',sans-serif;--mono:'DM Mono',monospace;
 }
 body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:13px}
+body.light{
+  --bg:#F5F5F5;--bg2:#FFFFFF;--bg3:#EEEEEE;--bg4:#E6E6E6;
+  --border:#DCDCDC;--border2:#C4C4C4;
+  --text:#1A1A1A;--text2:#555555;--text3:#AAAAAA;
+  --green:#16A34A;--gdim:rgba(22,163,74,.12);
+  --red:#DC2626;--rdim:rgba(220,38,38,.12);
+  --blue:#2563EB;--bdim:rgba(37,99,235,.12);
+  --amber:#D97706;--adim:rgba(217,119,6,.12);
+  --purple:#7C3AED;--pdim:rgba(124,58,237,.12);
+  --teal:#0D9488;--tdim:rgba(13,148,136,.12);
+}
 .topbar{height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;border-bottom:1px solid var(--border);background:var(--bg);position:sticky;top:0;z-index:50}
 .logo{font-family:var(--mono);font-size:13px;font-weight:500;letter-spacing:-.02em}
 .logo em{color:var(--green);font-style:normal}
@@ -217,6 +228,7 @@ tr:hover .move-btns { opacity:1; }
 </style>
 </head>
 <body>
+<script>if(localStorage.getItem('gastos_tema')==='light')document.body.classList.add('light');</script>
 <div class="topbar">
   <div class="logo">gastos<em>_</em>app</div>
   <div class="tabs-top">
@@ -228,6 +240,7 @@ tr:hover .move-btns { opacity:1; }
     </button>
   </div>
   <div class="top-r" style="display:flex;align-items:center;gap:8px">
+    <button class="ctl" id="btn-tema" onclick="toggleTema()" title="Modo claro/oscuro" style="cursor:pointer;font-size:14px;padding:4px 9px">🌙</button>
     <button class="ctl" onclick="openGest()" style="cursor:pointer" title="Gestionar conceptos e ítems">⚙ Conceptos</button>
     <select class="ctl" id="sel-periodo" onchange="updPeriodo()" title="Rango de meses a mostrar en gráficos y P&L">
       <option value="6">6 meses</option>
@@ -695,6 +708,21 @@ Ejemplos:
   </div>
 </div>
 
+<!-- Modal Agregar Ingreso desde P&L -->
+<div class="overlay" id="modal-ingreso">
+  <div class="modal" style="width:420px" onclick="event.stopPropagation()">
+    <h3 id="ing-title">Agregar ingreso</h3>
+    <div class="frow"><label>Monto ($)</label><input type="number" id="ing-monto" step="1" placeholder="4997172"></div>
+    <div class="frow"><label>Fecha</label><input type="date" id="ing-fecha"></div>
+    <div class="frow"><label>Comentario (opcional)</label><input type="text" id="ing-comentario" placeholder="ej. SUELDO TOESCA MAYO"></div>
+    <div id="ing-status" style="font-size:11px;min-height:16px;margin-top:6px;color:var(--red)"></div>
+    <div class="mbtns">
+      <button class="btn btn-g" onclick="$('modal-ingreso').classList.remove('show')">Cancelar</button>
+      <button class="btn btn-s" onclick="saveIngreso()">Guardar →</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="modal">
   <div class="modal" style="width:500px">
     <h3>Editar movimiento <span id="mod-id" style="font-size:11px;color:var(--text3);font-weight:400"></span></h3>
@@ -841,7 +869,14 @@ function buildAggregatedData(){
   hist.filter(h=>h.planilla==='personal').forEach(h=>{const k=h.año+'-'+String(h.mes).padStart(2,'0');if(h.subtipo==='operacional'&&h.tipo==='gasto'){if(!D.gastos_op[k])D.gastos_op[k]={};const c=h.concepto||'Otros';D.gastos_op[k][c]=(D.gastos_op[k][c]||0)+h.monto;}if(h.subtipo==='extraordinario'&&h.tipo==='gasto'){if(!D.extras[k])D.extras[k]={};const c=h.item||'Otros';D.extras[k][c]=(D.extras[k][c]||0)+h.monto;}});
   D.inversiones_ent={};
   const ENTS=['Fintual','Toesca','Racional','Security','Budacom','Capitaria'];
-  hist.filter(h=>h.planilla==='personal'&&(h.subtipo==='hipotecario'||h.subtipo==='rescate_fondo')).forEach(h=>{const k=h.año+'-'+String(h.mes).padStart(2,'0');if(!D.inversiones_ent[k])D.inversiones_ent[k]={aportes:{},rescates:{}};const com=(h.comentario||'').toUpperCase();let ent='Otros';for(const e of ENTS){if(com.includes(e.toUpperCase())){ent=e;break;}}if(h.subtipo==='hipotecario')D.inversiones_ent[k].aportes[ent]=(D.inversiones_ent[k].aportes[ent]||0)+h.monto;else D.inversiones_ent[k].rescates[ent]=(D.inversiones_ent[k].rescates[ent]||0)+h.monto;});
+  hist.filter(h=>{
+    if(h.planilla!=='personal') return false;
+    if(h.subtipo!=='hipotecario'&&h.subtipo!=='rescate_fondo') return false;
+    // Excluir pagos hipotecarios de departamentos (COOPEUCH + item 'Hipotecario X')
+    const com=(h.comentario||'').toUpperCase();
+    if((h.item||'').startsWith('Hipotecario')||com.includes('COOPEUCH')) return false;
+    return true;
+  }).forEach(h=>{const k=h.año+'-'+String(h.mes).padStart(2,'0');if(!D.inversiones_ent[k])D.inversiones_ent[k]={aportes:{},rescates:{}};const com=(h.comentario||'').toUpperCase();let ent='Otros';for(const e of ENTS){if(com.includes(e.toUpperCase())){ent=e;break;}}if(h.subtipo==='hipotecario')D.inversiones_ent[k].aportes[ent]=(D.inversiones_ent[k].aportes[ent]||0)+h.monto;else D.inversiones_ent[k].rescates[ent]=(D.inversiones_ent[k].rescates[ent]||0)+h.monto;});
   D.gastos_casa={};D.pnl_casa={};
   D.meses_all_casa.forEach(m=>{const[y,mo]=m.split('-').map(Number);const rows=hist.filter(h=>h.planilla==='casa'&&h.año===y&&h.mes===mo);const sin={},ocio={};rows.forEach(h=>{const neto=h.tipo==='gasto'?h.monto:h.tipo==='devolucion'?-h.monto:0;if(neto<=0)return;const c=h.concepto||'Otros';if(OCIO.has(c))ocio[c]=(ocio[c]||0)+neto;else sin[c]=(sin[c]||0)+neto;});D.gastos_casa[m]={sin_ocio:sin,ocio:ocio};const tS=Object.values(sin).reduce((s,v)=>s+v,0),tO=Object.values(ocio).reduce((s,v)=>s+v,0);const apS=rows.filter(h=>h.tipo==='ingreso'&&h.pagado_por==='Seba').reduce((s,h)=>s+h.monto,0);const apB=rows.filter(h=>h.tipo==='ingreso'&&h.pagado_por==='Bea').reduce((s,h)=>s+h.monto,0);D.pnl_casa[m]={gastos_sin_ocio:sin,gastos_ocio:ocio,total_sin_ocio:tS,total_ocio:tO,total_gastos:tS+tO,seba:apS,bea:apB,total_aportes:apS+apB,saldo:apS+apB-(tS+tO)};});
   D.items_personal={};D.items_casa={};
@@ -919,9 +954,11 @@ let pendientes=[], gestPlanilla='personal', gestConcepto=null, gestItem=null;
 // ── COLA PENDIENTES EN SUPABASE ───────────────────────────────────
 async function guardarPendientesSB() {
   try {
-    // Borrar todos los pendientes actuales
-    await fetch(SUPABASE_URL+'/rest/v1/pendientes_cola?id=neq.null', {method:'DELETE', headers:sbH});
-    if(pendientes.length === 0) return;
+    if(pendientes.length === 0) {
+      // Cola vacía: borrar todo
+      await fetch(SUPABASE_URL+'/rest/v1/pendientes_cola?id=neq.null', {method:'DELETE', headers:sbH});
+      return;
+    }
     const rows = pendientes.map(p => ({
       id: String(p.id),
       fecha: p.fecha,
@@ -932,19 +969,24 @@ async function guardarPendientesSB() {
       concepto: p.concepto,
       item: p.item,
       tipo: p.tipo,
-      subtipo: p.subtipo || null,
-      medio_pago: p.medio_pago || null,
       pagado_por: p.pagado_por,
       reembolsado: p.reembolsado || 0,
       omitir: p.omitir || false,
       posible_dup: p.posible_dup ? JSON.stringify(p.posible_dup) : null,
     }));
-    // Usar upsert para evitar conflictos de ID
-    await fetch(SUPABASE_URL+'/rest/v1/pendientes_cola', {
+    // PASO 1: upsert — si falla, se aborta sin tocar nada
+    const r = await fetch(SUPABASE_URL+'/rest/v1/pendientes_cola', {
       method: 'POST',
       headers: {...sbH, 'Content-Type':'application/json', 'Prefer':'resolution=merge-duplicates'},
       body: JSON.stringify(rows)
     });
+    if(!r.ok) {
+      console.error('Error guardando pendientes:', r.status, await r.text());
+      return; // NO borrar nada si el upsert falló
+    }
+    // PASO 2: recién ahora borrar los que ya no están en la lista
+    const ids = rows.map(r=>r.id).join(',');
+    await fetch(SUPABASE_URL+'/rest/v1/pendientes_cola?id=not.in.('+ids+')', {method:'DELETE', headers:sbH});
   } catch(e) { console.error('Error guardando pendientes:', e); }
 }
 async function cargarPendientesSB() {
@@ -1088,17 +1130,14 @@ function renderPnl(){
   // row: lbl, vals, cls, isSub, isBold, concepto, pl
   // isSub=true → visualmente indentado (tr-sub)
   // concepto !== null → tiene botones de mover
-  function row(lbl,vals,cls,isSub,isBold,concepto,pl){
+  function row(lbl,vals,cls,isSub,isBold,concepto,pl,editSubtipo){
     const av=avg(vals);
-    // Drill-down expand button
     const hasItems=concepto&&pl&&(pl==='personal'?D.items_personal:D.items_casa)&&
       M.some(m=>(pl==='personal'?D.items_personal:D.items_casa)[m]?.[concepto]);
     const expanded=expandedConcepts[(pl||'')+'_'+(concepto||'')];
     const expBtn=hasItems&&!isBold?
       `<span class="exp-btn" data-key="${(pl||'')}_${concepto||''}" style="cursor:pointer;color:var(--text3);font-size:10px;margin-left:4px">${expanded?'▼':'▶'}</span>`:
       '';
-    // Move buttons: concepto nivel = isSub && concepto && lbl===concepto
-    //               item nivel    = isSub && concepto && lbl!==concepto (en drill-down, no pasa por row())
     const isConc=!isBold&&concepto&&pl&&(lbl===concepto);
     const mvAttrs=isConc?` data-mvt="c" data-mvc="${concepto}" data-mvp="${pl||''}"` : '';
 
@@ -1106,6 +1145,12 @@ function renderPnl(){
     h+=`<td${isBold?' style="font-weight:600"':''}${mvAttrs}>${lbl}${expBtn}</td>`;
     vals.forEach((v,i)=>{
       const m=M[i];
+      // Celda editable de ingreso (Sueldo, Bono, Arriendos)
+      if(editSubtipo&&m){
+        h+=`<td class="pos clickable" onclick="openIngresoEdit('${editSubtipo}','${m}')" title="Click para ${v?'editar':'agregar'}">`;
+        h+=v?fclp(v):`<span style="color:var(--text3);font-size:10px">+ agregar</span>`;
+        h+=`</td>`;return;
+      }
       if(!v){h+=`<td class="neu">—</td>`;return;}
       const click=concepto&&m&&!isBold;
       const cc=concepto||'';
@@ -1134,8 +1179,8 @@ function renderPnl(){
 
   // Ingresos
   sec('Ingresos');
-  row('Sueldo',M.map(m=>D.pnl[m]?.sueldo||null),'pos',true,false,null,null);
-  row('Bono / Otros',M.map(m=>D.pnl[m]?.bono||null),'pos',true,false,null,null);
+  row('Sueldo',M.map(m=>D.pnl[m]?.sueldo||null),'pos',true,false,null,null,'sueldo');
+  row('Bono / Otros',M.map(m=>D.pnl[m]?.bono||null),'pos',true,false,null,null,'bono_otro');
   row('Total',M.map(m=>((D.pnl[m]?.sueldo||0)+(D.pnl[m]?.bono||0))||null),'pos',false,true,null,null);
 
   // Gastos op — orden personalizado, Otros siempre al final, sin duplicados
@@ -1164,7 +1209,7 @@ function renderPnl(){
   sec('Departamentos (proporcional)');
   ['2201','1902','2103'].forEach(d=>{
     const pt=PART[d]||1;
-    row('Depto '+d+' arriendo ('+pt*100+'%)',M.map(m=>(D.pnl[m]?.arriendos?.[d]||0)*pt||null),'pos',true,false,null,null);
+    row('Depto '+d+' arriendo ('+pt*100+'%)',M.map(m=>(D.pnl[m]?.arriendos?.[d]||0)*pt||null),'pos',true,false,null,null,'arriendo_'+d);
     row('Depto '+d+' hipotecario',M.map(m=>(D.pnl[m]?.hipotecarios?.[d]||0)*pt?-((D.pnl[m]?.hipotecarios?.[d]||0)*pt):null),'neg',true,false,null,null);
   });
   const nd=M.map(m=>{const p=D.pnl[m]||{};return ['2201','1902','2103'].reduce((s,d)=>{const pt=PART[d]||1;return s+((p.arriendos?.[d]||0)-(p.hipotecarios?.[d]||0))*pt;},0)-(p.gastos_admin||0)||null;});
@@ -2592,6 +2637,9 @@ function renderPendientes() {
         </div>
       </div>
       <div class="pend-actions">
+        <div style="font-size:9px;font-family:var(--mono);text-align:right;margin-bottom:2px;padding:1px 5px;border-radius:3px;background:${(p.monto_original||0)>=0?'var(--gdim)':'var(--rdim)'};color:${(p.monto_original||0)>=0?'var(--green)':'var(--red)'}">
+          ${(p.monto_original||0)>=0?'↑ ABONO':'↓ CARGO'}
+        </div>
         <div class="pend-monto" style="color:${TIPO_COL[p.tipo]||'var(--text)'}">
           $${p.monto.toLocaleString('es-CL',{maximumFractionDigits:0})}
         </div>
@@ -3000,6 +3048,81 @@ function filtH() {
 }
 
 
+
+// ── TEMA CLARO/OSCURO ─────────────────────────────────────────────
+function toggleTema(){
+  const light=document.body.classList.toggle('light');
+  localStorage.setItem('gastos_tema',light?'light':'dark');
+  const btn=$('btn-tema');if(btn)btn.textContent=light?'☀️':'🌙';
+}
+// Actualizar ícono tras carga
+(function(){if(localStorage.getItem('gastos_tema')==='light'){const btn=$('btn-tema');if(btn)btn.textContent='☀️';}})();
+
+// ── INGRESO EDITOR DESDE P&L ──────────────────────────────────────
+let _ingMeta={subtipo:null,mes:null,concepto:null};
+const _ingLabels={sueldo:'Sueldo',bono_otro:'Bono / Otros',arriendo_2201:'Arriendo Depto 2201',arriendo_1902:'Arriendo Depto 1902',arriendo_2103:'Arriendo Depto 2103'};
+const _ingConceptos={sueldo:'Sueldo',bono_otro:'Bono / Otros',arriendo_2201:'Arriendo 2201',arriendo_1902:'Arriendo 1902',arriendo_2103:'Arriendo 2103'};
+const _ingSubtipos={sueldo:'sueldo',bono_otro:'bono_otro',arriendo_2201:'arriendo_2201',arriendo_1902:'arriendo_1902',arriendo_2103:'arriendo_2103'};
+
+function openIngresoEdit(subtipo,mes){
+  const[y,mo]=mes.split('-').map(Number);
+  // Buscar registro existente
+  let existing=null;
+  if(subtipo.startsWith('arriendo_')){
+    const depto=subtipo.replace('arriendo_','');
+    existing=D.hist.find(h=>h.planilla==='personal'&&h.tipo==='ingreso'
+      &&(h.subtipo||'').startsWith('arriendo_')
+      &&(h.concepto||'').includes(depto)&&h.año===y&&h.mes===mo);
+  } else {
+    existing=D.hist.find(h=>h.planilla==='personal'&&h.tipo==='ingreso'
+      &&h.subtipo===subtipo&&h.año===y&&h.mes===mo);
+  }
+  // Si ya existe, abrimos el modal de edición estándar
+  if(existing){openMod(existing.id);return;}
+  // Abrir modal para crear nuevo
+  _ingMeta={subtipo,mes,concepto:_ingConceptos[subtipo]||'Ingreso'};
+  $('ing-title').textContent='Agregar '+(_ingLabels[subtipo]||subtipo)+' — '+mlbl(mes);
+  $('ing-monto').value='';
+  const lastDay=new Date(y,mo,0).getDate();
+  $('ing-fecha').value=y+'-'+String(mo).padStart(2,'0')+'-'+String(lastDay).padStart(2,'0');
+  $('ing-comentario').value='';
+  $('ing-status').textContent='';
+  $('modal-ingreso').classList.add('show');
+}
+async function saveIngreso(){
+  const monto=parseFloat($('ing-monto').value)||0;
+  const fecha=$('ing-fecha').value;
+  if(!monto){$('ing-status').textContent='⚠ Ingresa un monto';return;}
+  if(!fecha){$('ing-status').textContent='⚠ Ingresa una fecha';return;}
+  const[y,mo]=fecha.split('-').map(Number);
+  $('ing-status').textContent='Guardando...';$('ing-status').style.color='var(--text2)';
+  const id=String(Date.now())+String(Math.floor(Math.random()*10000));
+  const nuevo={
+    id,fecha,año:y,mes:mo,
+    planilla:'personal',tipo:'ingreso',
+    subtipo:_ingMeta.subtipo,
+    concepto:_ingMeta.concepto,
+    item:null,monto,
+    comentario:$('ing-comentario').value||null,
+    pagado_por:null,reembolsado:'0',medio_pago:null
+  };
+  const r=await fetch(SUPABASE_URL+'/rest/v1/movimientos',{
+    method:'POST',
+    headers:{...sbH,'Content-Type':'application/json','Prefer':'return=representation'},
+    body:JSON.stringify([nuevo])
+  });
+  if(r.ok){
+    const rows=await r.json();
+    D.hist.unshift({...nuevo,id:rows[0]?.id||id,reembolsado:0});
+    buildAggregatedData();initSel();initHistSel();upd();
+    if($('sec-pnl').classList.contains('open'))renderPnl();
+    $('modal-ingreso').classList.remove('show');
+  } else {
+    const err=await r.text();
+    $('ing-status').textContent='⚠ Error: '+err.slice(0,80);
+    $('ing-status').style.color='var(--red)';
+  }
+}
 
 bootApp();
 </script>
