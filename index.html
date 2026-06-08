@@ -2195,11 +2195,36 @@ function parseFecha(s) {
     const year = y.length===2 ? '20'+y : y;
     return `${year}-${mo.padStart(2,'0')}-${d.padStart(2,'0')}`;
   }
+  // DD/MM sin año (Santander CC): inferir año del contexto actual
+  const m2 = s.match(/^(\d{1,2})\/(\d{2})$/);
+  if(m2) {
+    const [,d,mo] = m2;
+    const hoy = new Date();
+    const moN = parseInt(mo), yrN = hoy.getFullYear();
+    const yr = moN > hoy.getMonth()+2 ? yrN-1 : yrN;
+    return `${yr}-${mo.padStart(2,'0')}-${d.padStart(2,'0')}`;
+  }
   return null;
 }
 function parsearCartola(texto, banco) {
-  const lineas = texto.split('\n').filter(l => l.trim().length > 3);
+  let lineas = texto.split('\n').filter(l => l.trim().length > 3);
   const movs = [];
+
+  // Pre-procesado Santander CC: unir líneas de montos (solo números con puntos) con la línea anterior
+  // Ej: "04/05 Agustinas 0260538543 Transf. Elizabeth..." + "545.419" → una sola línea
+  {
+    const amtRe = /^\s*\d{1,3}(?:\.\d{3})+(?:\s+\d{1,3}(?:\.\d{3})+)*\s*$/;
+    const result = [];
+    for(const lin of lineas) {
+      const lt = lin.trim();
+      if(amtRe.test(lt) && result.length > 0 && /^\d{1,2}\/\d{2}/.test(result[result.length-1].trim())) {
+        result[result.length-1] += '  ' + lt; // 2 espacios → Pattern 2 lo captura
+      } else {
+        result.push(lin);
+      }
+    }
+    lineas = result;
+  }
 
   // ── SANTANDER TC: LUGAR FECHA DD/MM/YY DESCRIPCION $MONTO ──
   // Detectar por presencia de líneas con fecha DD/MM/YY y $monto
@@ -2313,11 +2338,36 @@ function parsearCartola(texto, banco) {
           desc = cols[2];
           cargo = limpiar7(cols[4]);
           abono = limpiar7(cols[5]);
-        } else if(cols.length >= 4 && cols[1] && cols[1].length > 2) {
-          // 5-col estándar: fecha|desc|cargo|abono|saldo
-          desc = cols[1];
-          cargo = limpiar7(cols[2]);
-          abono = limpiar7(cols[3]);
+        } else if(cols.length >= 4) {
+          // Detectar si cols[1] es sucursal bancaria (corta, sin dígitos largos)
+          const isSuc = cols[1] && cols[1].length<=15 && !/\d{4,}/.test(cols[1]);
+          if(isSuc && cols.length >= 4) {
+            // Formato Santander CC comprimido: fecha|sucursal|desc|[nº_dcto|]monto
+            desc = cols[2] || '';
+            // Buscar el monto real: último valor con separador de miles (d.ddd)
+            let foundMonto = 0;
+            for(let ci=cols.length-1; ci>=3; ci--) {
+              const raw = cols[ci];
+              if(/\d+\.\d{3}/.test(raw)) { // tiene separador de miles
+                const v = limpiar7(raw);
+                if(v>0 && foundMonto===0) foundMonto = v;
+                else if(v>0 && v < foundMonto*2.5) foundMonto = v; // este es menor → monto real
+              }
+            }
+            if(foundMonto>0) {
+              const dU = desc.toUpperCase();
+              if(/^TRASPASO|INTERNET A T|^PAGO\s|TRANSF A |IMPUESTO|COMISION|COM\./.test(dU)) {
+                cargo = foundMonto; abono = 0;
+              } else {
+                cargo = 0; abono = foundMonto;
+              }
+            }
+          } else if(!isSuc && cols[1] && cols[1].length > 2) {
+            // 5-col estándar: fecha|desc|cargo|abono|saldo
+            desc = cols[1];
+            cargo = limpiar7(cols[2]);
+            abono = limpiar7(cols[3]);
+          }
         }
         if(desc && (cargo > 0 || abono > 0)) {
           fecha = fechaCandidata;
@@ -2332,10 +2382,36 @@ function parsearCartola(texto, banco) {
       if(m) { fecha = parseFecha(m[1]); desc = m[2].trim(); montoRaw = parseMonto(m[3]); }
     }
 
-    // Patrón 2: DD/MM/YY  DESCRIPCION  monto
+    // Patrón 2: DD/MM[/YY]  SUCURSAL? DESCRIPCION  monto [saldo]
     if(!fecha) {
-      let m = l.match(/^(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})\s{1,4}(.+?)\s{2,}([+-]?[\d.,]+)\s*$/);
-      if(m) { fecha = parseFecha(m[1]); desc = m[2].trim(); montoRaw = parseMonto(m[3]); }
+      // Captura todos los números al final separados por 2+ espacios
+      let m = l.match(/^(\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?)\s{1,4}(.+?)\s{2,}([\d.,]+(?:\s+[\d.,]+)*)\s*$/);
+      if(m) {
+        fecha = parseFecha(m[1]);
+        let rawDesc = m[2].trim();
+        // Quitar sucursal al inicio (palabra corta sin dígitos largos)
+        const sucP = rawDesc.match(/^([A-Za-záéíóúÁÉÍÓÚñÑ.]{1,15})\s+(.{5,})$/);
+        if(sucP) rawDesc = sucP[2];
+        desc = rawDesc;
+        // Parsear montos: si hay 2 y el último es >> el anterior → es el saldo
+        const ams = m[3].split(/\s+/).map(a=>parseMonto(a)).filter(a=>a>0&&!isNaN(a));
+        if(ams.length===0) fecha=null;
+        else if(ams.length===1) montoRaw=ams[0];
+        else montoRaw = ams[ams.length-1]>ams[ams.length-2]*2.5 ? ams[ams.length-2] : ams[ams.length-1];
+        // Si montoRaw parece un saldo (muy grande vs números en la desc), buscar el monto real
+        const descPNums = rawDesc.match(/\b(\d{1,3}(?:\.\d{3})+)\b/g);
+        if(descPNums && descPNums.length > 0) {
+          const lastDescNum = Math.abs(typeof parseMonto === 'function' ? parseMonto(descPNums[descPNums.length-1]) : 0);
+          if(lastDescNum > 0 && Math.abs(montoRaw) > lastDescNum * 2.5) {
+            montoRaw = montoRaw < 0 ? -lastDescNum : lastDescNum;
+          }
+        }
+        // Heurística de signo
+        if(montoRaw>0){
+          const dU=rawDesc.toUpperCase();
+          if(/^TRASPASO|INTERNET A T|^PAGO\s|TRANSF A |IMPUESTO|COMISION|COM\./.test(dU)) montoRaw=-montoRaw;
+        }
+      }
     }
 
     // Patrón 3: fecha  desc  monto (espacios simples)
