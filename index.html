@@ -2334,10 +2334,21 @@ function parsearCartola(texto, banco) {
         let cargo = 0, abono = 0;
         if(cols.length >= 6) {
           // Santander CC 7-col: fecha|sucursal|desc|nº_dcto|cargos|abonos|saldo
-          // col[1]=sucursal, col[2]=desc, col[3]=nº_dcto, col[4]=cargos, col[5]=abonos
           desc = cols[2];
           cargo = limpiar7(cols[4]);
           abono = limpiar7(cols[5]);
+          // Fallback: si cols[4] y cols[5] son vacíos, el monto puede estar en cols[3]
+          if(cargo === 0 && abono === 0) {
+            const v3 = limpiar7(cols[3]);
+            if(v3 > 0 && /\d+\.\d{3}/.test(cols[3])) {
+              const dU3 = desc.toUpperCase();
+              if(/^TRASPASO|INTERNET A T|^PAGO\s|TRANSF A |IMPUESTO|COMISION|COM\./.test(dU3)) {
+                cargo = v3;
+              } else {
+                abono = v3;
+              }
+            }
+          }
         } else if(cols.length >= 4) {
           // Detectar si cols[1] es sucursal bancaria (corta, sin dígitos largos)
           const isSuc = cols[1] && cols[1].length<=15 && !/\d{4,}/.test(cols[1]);
