@@ -600,9 +600,11 @@ Ejemplos:
         <input type="text" id="hq" placeholder="Buscar..." oninput="filtH()">
         <select class="ctl" id="ht" onchange="filtH()">
           <option value="">Todos los tipos</option>
-          <option value="gasto">Gasto</option><option value="ingreso">Ingreso</option>
-          <option value="inversion">Inversión</option><option value="devolucion">Devolución</option>
-          <option value="transferencia_interna">Transf. interna</option>
+          <option value="ingreso">Ingreso</option>
+          <option value="gasto">Gasto</option>
+          <option value="devolucion">Reembolso</option>
+          <option value="inversion">Inversión</option>
+          <option value="transferencia_interna">Transferencia</option>
         </select>
         <select class="ctl" id="hp" onchange="filtH()">
           <option value="">Ambas</option>
@@ -743,11 +745,11 @@ Ejemplos:
       </div>
       <div class="frow"><label>Tipo</label>
         <select id="et">
-          <option value="gasto">Gasto</option>
           <option value="ingreso">Ingreso</option>
+          <option value="gasto">Gasto</option>
+          <option value="devolucion">Reembolso</option>
           <option value="inversion">Inversión</option>
-          <option value="devolucion">Devolución</option>
-          <option value="transferencia_interna">Transf. interna</option>
+          <option value="transferencia_interna">Transferencia</option>
         </select>
       </div>
     </div>
@@ -930,6 +932,9 @@ const $ = id => document.getElementById(id);
 const MS = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 function mlbl(m){const[y,mo]=m.split('-');return MS[+mo]+' '+y.slice(2);}
 function fk(v){if(!v&&v!==0)return'—';const a=Math.abs(v);return a>=1e6?'$'+(a/1e6).toFixed(1)+'M':a>=1e3?'$'+(a/1e3).toFixed(0)+'k':'$'+Math.round(a);}
+function sortOtrosLast(arr){
+  return [...arr].sort((a,b)=>a==='Otros'?1:b==='Otros'?-1:(a||'').localeCompare(b||'','es'));
+}
 function fclp(v){if(v===null||v===undefined)return'—';const a=Math.abs(v).toLocaleString('es-CL',{maximumFractionDigits:0});return v<0?'($'+a+')':'+$'+a;}
 function fabs(v){return v?'$'+Math.abs(v).toLocaleString('es-CL',{maximumFractionDigits:0}):'—';}
 function gn(d){return(d?.gasto||0)-(d?.devolucion||0);}
@@ -973,6 +978,8 @@ async function guardarPendientesSB() {
       concepto: p.concepto,
       item: p.item,
       tipo: p.tipo,
+      subtipo: p.subtipo || null,
+      medio_pago: p.medio_pago || null,
       pagado_por: p.pagado_por,
       reembolsado: p.reembolsado || 0,
       omitir: p.omitir || false,
@@ -2598,7 +2605,7 @@ function renderPendientes() {
   }
 
   // Lista de pendientes
-  const TIPOS = {gasto:'Gasto',ingreso:'Ingreso',inversion:'Inv.',devolucion:'Dev.',transferencia_interna:'Transf.'};
+  const TIPOS = {gasto:'Gasto',ingreso:'Ingreso',inversion:'Inversión',devolucion:'Reembolso',transferencia_interna:'Transferencia'};
   const TIPO_COL = {gasto:'var(--red)',ingreso:'var(--green)',inversion:'var(--blue)',devolucion:'var(--amber)',transferencia_interna:'var(--text3)'};
 
   $('pend-list').innerHTML = pendientes.map(p=>{
@@ -2627,7 +2634,7 @@ function renderPendientes() {
           </div>
           <div class="pf" style="min-width:100px"><label>Tipo</label>
             <select onchange="updatePend('${p.id}','tipo',this.value)">
-              ${['gasto','ingreso','inversion','devolucion','transferencia_interna'].map(t=>
+              ${['ingreso','gasto','devolucion','inversion','transferencia_interna'].map(t=>
                 `<option value="${t}"${p.tipo===t?' selected':''}>${TIPOS[t]}</option>`
               ).join('')}
             </select>
@@ -2635,13 +2642,20 @@ function renderPendientes() {
           <div class="pf" style="min-width:130px"><label>Concepto</label>
             <select onchange="updatePend('${p.id}','concepto',this.value)">
               <option value="">— elegir —</option>
-              ${conceptosList.map(c=>`<option value="${c}"${p.concepto===c?' selected':''}>${c}</option>`).join('')}
+              ${sortOtrosLast(conceptosList).map(c=>`<option value="${c}"${p.concepto===c?' selected':''}>${c}</option>`).join('')}
             </select>
           </div>
           <div class="pf" style="min-width:120px"><label>Ítem</label>
-            <input type="text" list="ilist-${p.id}" value="${p.item||''}"
-              onchange="updatePend('${p.id}','item',this.value)">
-            <datalist id="ilist-${p.id}">${itemsList.map(i=>`<option value="${i}">`).join('')}</datalist>
+            <select onchange="updatePend('${p.id}','item',this.value)">
+              <option value="">— elegir —</option>
+              ${sortOtrosLast(itemsList).map(i=>`<option value="${i}"${p.item===i?' selected':''}>${i}</option>`).join('')}
+            </select>
+          </div>
+          <div class="pf" style="min-width:120px"><label>Medio de Pago</label>
+            <select onchange="updatePend('${p.id}','medio_pago',this.value)">
+              <option value="">— elegir —</option>
+              ${(D.medios_pago||[]).map(m=>`<option value="${m}"${p.medio_pago===m?' selected':''}>${m}</option>`).join('')}
+            </select>
           </div>
           <div class="pf" style="min-width:160px;flex:1"><label>Comentario</label>
             <input type="text" value="${(p.descripcion||'').replace(/"/g,'&quot;')}"
@@ -3063,7 +3077,7 @@ function filtH() {
     <tr style="border-bottom:1px solid var(--border)">
       <td style="font-family:var(--mono);font-size:11px;color:var(--text3)">${h.fecha||'—'}</td>
       <td><span class="badge bt-${h.planilla==='personal'?'p':'c'}">${h.planilla==='personal'?'Seba':'Casa'}</span></td>
-      <td><span class="badge bt-${h.tipo}">${{'gasto':'Gasto','ingreso':'Ingreso','inversion':'Inv.','devolucion':'Dev.','transferencia_interna':'Transf.'}[h.tipo]||h.tipo}</span></td>
+      <td><span class="badge bt-${h.tipo}">${{'gasto':'Gasto','ingreso':'Ingreso','inversion':'Inversión','devolucion':'Reembolso','transferencia_interna':'Transf.'}[h.tipo]||h.tipo}</span></td>
       <td style="text-align:left;color:var(--text)">${h.concepto||'—'}${h.item?` <span style="color:var(--text3)">/ ${h.item}</span>`:''}</td>
       <td style="text-align:right;color:${h.tipo==='gasto'?'var(--red)':h.tipo==='ingreso'?'var(--green)':'var(--text2)'}">${fabs(h.monto)}</td>
       <td style="text-align:left;color:var(--text3)">${h.medio_pago||h.pagado_por||'—'}</td>
