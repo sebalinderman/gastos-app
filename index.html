@@ -2233,38 +2233,63 @@ function parsearCartola(texto, banco) {
     return movs;
   }
 
-  // ── BCI: fecha desc serie monto saldo (sin columna cargo/abono separada) ──
-  const esBCI = lineas.filter(l => /^\d{2}-\d{2}-\d{4}\s+.+\s+\d{3,12}\s+[\d.]+\s+[\d.]+\s*$/.test(l.trim())).length >= 2;
+  // ── BCI CC: Fecha|Desc|Serie|Monto$|Saldo — soporta descripciones multi-línea ──
+  // Formato: DD-MM-YYYY | descripcion (puede ser multi-línea) | serie (12 dígitos) | monto | saldo
+  // El signo se determina comparando saldo actual vs saldo previo (datos en orden descendente)
+  const esBCI = banco === 'bci' || lineas.filter(l => /^\d{2}-\d{2}-\d{4}\s/i.test(l.trim())).length >= 2;
   if(esBCI) {
-    const reBCI = /^(\d{2}-\d{2}-\d{4})\s+(.+?)\s+(\d{3,12})\s+([\d.,]+)\s+([\d.,]+)\s*$/;
-    const filas = [];
+    const txs = [];
+    let cur = null;
+    const skipLine = /^(fecha|abono a la|cargo a la|descripci|corriente|cartola|https|bci\s|mostrar|graficar|serv|monto\s?\$|saldo\s|ecol)/i;
+
     for(const linea of lineas) {
-      const m = linea.trim().match(reBCI);
-      if(!m) continue;
-      const desc = m[2].trim();
-      if(/^(fecha|descripci|serie|monto|saldo)/i.test(desc)) continue;
-      filas.push({
-        fecha: parseFecha(m[1]),
-        descripcion: desc,
-        monto: parseFloat(m[4].replace(/\./g,'').replace(',','.')),
-        saldo: parseFloat(m[5].replace(/\./g,'').replace(',','.'))
-      });
-    }
-    for(let i=0; i<filas.length; i++) {
-      const f = filas[i];
-      if(!f.fecha || !f.monto) continue;
-      let esAbono = false;
-      if(i < filas.length-1) {
-        esAbono = f.saldo > filas[i+1].saldo;
-      } else {
-        esAbono = Math.abs(f.saldo - f.monto) < 100;
+      const l = linea.trim();
+      if(!l || skipLine.test(l)) continue;
+
+      // Nueva transacción: línea empieza con fecha DD-MM-YYYY
+      const dm = l.match(/^(\d{2}-\d{2}-\d{4})\s+(.*)/);
+      if(dm) {
+        if(cur && cur.monto != null) txs.push(cur);
+        const restOfLine = dm[2].trim();
+        // Intentar parsear serie+monto+saldo en la misma línea: desc serie monto saldo
+        const ia = restOfLine.match(/^(.+?)\s+(\d{3,15})\s+([\d.]+(?:,\d+)?)\s+([\d.]+(?:,\d+)?)\s*$/);
+        if(ia) {
+          txs.push({ fecha: parseFecha(dm[1]), desc: ia[1].trim(), monto: parseMonto(ia[3]), saldo: parseMonto(ia[4]) });
+          cur = null;
+        } else {
+          cur = { fecha: parseFecha(dm[1]), desc: restOfLine, monto: null, saldo: null };
+        }
+        continue;
       }
-      movs.push({
-        fecha: f.fecha,
-        descripcion: f.descripcion,
-        monto_original: esAbono ? f.monto : -f.monto,
-        monto: f.monto
-      });
+
+      if(!cur) continue;
+
+      // Línea de montos: serie(3-15 dígitos) monto saldo
+      const am = l.match(/^(\d{3,15})\s+([\d.]+(?:,\d+)?)\s+([\d.]+(?:,\d+)?)\s*$/);
+      if(am) {
+        cur.monto = parseMonto(am[2]);
+        cur.saldo = parseMonto(am[3]);
+        txs.push(cur);
+        cur = null;
+        continue;
+      }
+
+      // Continuación de descripción (ej: "(CUOTA 2)", "SOBREGIRO A CTA CTE")
+      cur.desc = (cur.desc ? cur.desc + ' ' + l : l).trim();
+    }
+    if(cur && cur.monto != null) txs.push(cur);
+
+    // Determinar signo: en datos descendentes, si saldo[i] > saldo[i+1] → fue un abono
+    for(let i=0; i<txs.length; i++) {
+      const t = txs[i];
+      if(!t.fecha || t.monto == null || !t.desc) continue;
+      if(/^(fecha|descripci|saldo|abono|cargo|corriente|mostrar)/i.test(t.desc)) continue;
+      // Saldo > monto → el saldo creció → fue un ABONO (para el último registro sin comparador)
+      const esAbono = i < txs.length-1
+        ? t.saldo > txs[i+1].saldo
+        : (t.saldo||0) >= t.monto;
+      movs.push({ fecha: t.fecha, descripcion: t.desc,
+        monto_original: esAbono ? t.monto : -t.monto, monto: t.monto });
     }
     return movs;
   }
@@ -2275,20 +2300,28 @@ function parsearCartola(texto, banco) {
 
     let fecha = null, desc = null, montoRaw = NaN;
 
-    // Patrón 0: Santander CC con tabs — DD-MM-YYYY\tDETALLE\tCARGO\tABONO\tSALDO
+      // Patrón 0: formato con tabs
     if(l.includes('\t')) {
       const cols = l.split('\t').map(c => c.trim());
-      if(cols.length >= 3) {
-        const fechaCandidata = parseFecha(cols[0]);
-        if(fechaCandidata && cols[1] && cols[1].length > 2) {
-          const limpiar = v => v ? parseFloat(v.replace(/\$/g,'').replace(/\./g,'').replace(',','.')) || 0 : 0;
-          const cargo = limpiar(cols[2]);
-          const abono = limpiar(cols[3]);
-          if(cargo > 0 || abono > 0) {
-            fecha = fechaCandidata;
-            desc = cols[1];
-            montoRaw = abono > 0 ? abono : -cargo;
-          }
+      const limpiar7 = v => v ? parseMonto(v.replace(/\$/g,'')) || 0 : 0;
+      const fechaCandidata = parseFecha(cols[0]);
+      if(fechaCandidata && cols.length >= 3) {
+        let cargo = 0, abono = 0;
+        if(cols.length >= 6) {
+          // Santander CC 7-col: fecha|sucursal|desc|nº_dcto|cargos|abonos|saldo
+          // col[1]=sucursal, col[2]=desc, col[3]=nº_dcto, col[4]=cargos, col[5]=abonos
+          desc = cols[2];
+          cargo = limpiar7(cols[4]);
+          abono = limpiar7(cols[5]);
+        } else if(cols.length >= 4 && cols[1] && cols[1].length > 2) {
+          // 5-col estándar: fecha|desc|cargo|abono|saldo
+          desc = cols[1];
+          cargo = limpiar7(cols[2]);
+          abono = limpiar7(cols[3]);
+        }
+        if(desc && (cargo > 0 || abono > 0)) {
+          fecha = fechaCandidata;
+          montoRaw = abono > 0 ? abono : -cargo;
         }
       }
     }
@@ -2308,7 +2341,20 @@ function parsearCartola(texto, banco) {
     // Patrón 3: fecha  desc  monto (espacios simples)
     if(!fecha) {
       let m = l.match(/^(\d{4}-\d{2}-\d{2}|\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})\s+(.+?)\s+([+-]?\d[\d.,]*)$/);
-      if(m) { fecha = parseFecha(m[1]); desc = m[2].trim(); montoRaw = parseMonto(m[3]); }
+      if(m) {
+        fecha = parseFecha(m[1]);
+        let rawDesc = m[2].trim();
+        // Si la desc empieza con una palabra corta sin espacios (sucursal), quitarla
+        const sucM = rawDesc.match(/^([A-Za-záéíóúÁÉÍÓÚñÑ.]{1,15})\s+(.{5,})$/);
+        if(sucM) rawDesc = sucM[2];
+        desc = rawDesc;
+        montoRaw = parseMonto(m[3]);
+        // Heurística de signo: si la descripción indica un pago saliente → negativo
+        const dUp = rawDesc.toUpperCase();
+        if(montoRaw > 0 && /^TRASPASO|^PAGO\s|^COM\.MANTENC|INTERNET A T|TRANSF A |TRANSF\. A /.test(dUp)) {
+          montoRaw = -montoRaw;
+        }
+      }
     }
 
     if(!fecha || !desc || isNaN(montoRaw) || montoRaw === 0) continue;
