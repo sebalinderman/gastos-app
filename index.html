@@ -221,7 +221,8 @@ td.active-cell { background: rgba(96,165,250,.2) !important; outline: 1px solid 
 .drag-handle:active{cursor:grabbing}
 
 /* row move */
-.move-btns { display:inline-flex; flex-direction:column; gap:0; margin-left:5px; vertical-align:middle; opacity:0; transition:opacity .15s; }
+.move-btns { display:inline-flex; flex-direction:column; gap:0; margin-right:8px; margin-left:0; vertical-align:middle; opacity:0; transition:opacity .15s; }
+#cxp-detalle table thead th { position:static !important; top:auto; }
 tr:hover .move-btns { opacity:1; }
 .move-btns button { background:none; border:none; color:var(--text3); cursor:pointer; font-size:8px; line-height:1.2; padding:0 2px; display:block; }
 .move-btns button:hover { color:var(--blue); }
@@ -393,7 +394,10 @@ tr:hover .move-btns { opacity:1; }
       <span class="sec-toggle" id="tog-ocio-casa">▶</span>
     </div>
     <div class="sec-body" id="sec-ocio-casa">
-      <div class="chart-area"><div class="chart-wrap"><canvas id="c-ocio-casa"></canvas></div></div>
+      <div class="chart-layout">
+        <div class="legend-panel" id="leg-ocio-casa"></div>
+        <div class="chart-area"><div class="chart-wrap"><canvas id="c-ocio-casa"></canvas></div></div>
+      </div>
     </div>
   </div>
 
@@ -771,10 +775,10 @@ Ejemplos:
       </div>
     </div>
     <div class="frow"><label>Comentario</label><input type="text" id="eco"></div>
-    <div id="ereembolso-row" class="frow" style="display:none"><label>Reembolsado</label>
+    <div id="ereembolso-row" class="frow" style="display:none"><label>Estado de pago</label>
       <select id="ereembolso">
         <option value="0">Pendiente</option>
-        <option value="1">Reembolsado ✓</option>
+        <option value="1">Saldado ✓</option>
       </select>
     </div>
     <div id="mod-status" style="font-size:11px;color:var(--green);margin-top:8px;min-height:16px"></div>
@@ -864,7 +868,7 @@ function buildAggregatedData(){
   D.pm={};D.cm={};
   hist.forEach(h=>{const k=h.año+'-'+String(h.mes).padStart(2,'0');const o=h.planilla==='personal'?D.pm:D.cm;if(!o[k])o[k]={};o[k][h.tipo]=(o[k][h.tipo]||0)+h.monto;});
   D.pnl={};
-  D.meses_all.forEach(m=>{const[y,mo]=m.split('-').map(Number);const rows=hist.filter(h=>h.planilla==='personal'&&h.año===y&&h.mes===mo);D.pnl[m]={sueldo:rows.filter(h=>h.subtipo==='sueldo').reduce((s,h)=>s+h.monto,0),bono:rows.filter(h=>h.subtipo==='bono_otro').reduce((s,h)=>s+h.monto,0),arriendos:{},hipotecarios:{},gastos_admin:0};rows.filter(h=>h.tipo==='ingreso'&&h.subtipo?.startsWith('arriendo_')).forEach(h=>{const d=h.concepto?.replace('Arriendo ','');if(d)D.pnl[m].arriendos[d]=(D.pnl[m].arriendos[d]||0)+h.monto;});rows.filter(h=>h.subtipo==='hipotecario').forEach(h=>{const d=h.item?.replace('Hipotecario ','');if(d)D.pnl[m].hipotecarios[d]=(D.pnl[m].hipotecarios[d]||0)+h.monto;});D.pnl[m].gastos_admin=rows.filter(h=>h.subtipo==='gasto_depto').reduce((s,h)=>s+h.monto,0);});
+  D.meses_all.forEach(m=>{const[y,mo]=m.split('-').map(Number);const rows=hist.filter(h=>h.planilla==='personal'&&h.año===y&&h.mes===mo);D.pnl[m]={sueldo:rows.filter(h=>h.subtipo==='sueldo').reduce((s,h)=>s+h.monto,0),bono:rows.filter(h=>h.subtipo==='bono_otro').reduce((s,h)=>s+h.monto,0),otros_ing:rows.filter(h=>h.tipo==='ingreso'&&h.subtipo!=='sueldo'&&h.subtipo!=='bono_otro'&&!(h.subtipo||'').startsWith('arriendo_')&&!(h.concepto||'').startsWith('Arriendo ')).reduce((s,h)=>s+h.monto,0),arriendos:{},hipotecarios:{},gastos_admin:0};rows.filter(h=>h.tipo==='ingreso'&&h.subtipo?.startsWith('arriendo_')).forEach(h=>{const d=h.concepto?.replace('Arriendo ','');if(d)D.pnl[m].arriendos[d]=(D.pnl[m].arriendos[d]||0)+h.monto;});rows.filter(h=>h.subtipo==='hipotecario').forEach(h=>{const d=h.item?.replace('Hipotecario ','');if(d)D.pnl[m].hipotecarios[d]=(D.pnl[m].hipotecarios[d]||0)+h.monto;});D.pnl[m].gastos_admin=rows.filter(h=>h.subtipo==='gasto_depto').reduce((s,h)=>s+h.monto,0);});
   D.gastos_op={};D.extras={};
   hist.filter(h=>h.planilla==='personal').forEach(h=>{const k=h.año+'-'+String(h.mes).padStart(2,'0');if(h.subtipo==='operacional'&&h.tipo==='gasto'){if(!D.gastos_op[k])D.gastos_op[k]={};const c=h.concepto||'Otros';D.gastos_op[k][c]=(D.gastos_op[k][c]||0)+h.monto;}if(h.subtipo==='extraordinario'&&h.tipo==='gasto'){if(!D.extras[k])D.extras[k]={};const c=h.item||'Otros';D.extras[k][c]=(D.extras[k][c]||0)+h.monto;}});
   D.inversiones_ent={};
@@ -1048,20 +1052,20 @@ function moverItem(pl,concepto,item,dir){
 function addMoveButtons(tblId){
   const tbl=$(tblId); if(!tbl) return;
   tbl.querySelectorAll('td[data-mvt]').forEach(td=>{
-    if(td.querySelector('.mv-btns-col')) return;
+    if(td.querySelector('.move-btns')) return;
     const type=td.dataset.mvt;
     const conc=td.dataset.mvc||'';
     const itm=td.dataset.mvi||'';
     const pl=td.dataset.mvp||'personal';
     // Appendear botones sin tocar el contenido existente (preserva expand btn)
     const btnsCol=document.createElement('span');
-    btnsCol.className='mv-btns-col';
+    btnsCol.className='move-btns';
     const bu=document.createElement('button');bu.textContent='▲';bu.title='Subir';
     bu.onclick=e=>{e.stopPropagation();type==='c'?moverConcepto(pl,conc,'up'):moverItem(pl,conc,itm,'up');};
     const bd=document.createElement('button');bd.textContent='▼';bd.title='Bajar';
     bd.onclick=e=>{e.stopPropagation();type==='c'?moverConcepto(pl,conc,'down'):moverItem(pl,conc,itm,'down');};
     btnsCol.append(bu,bd);
-    td.appendChild(btnsCol);
+    td.insertBefore(btnsCol, td.firstChild);
   });
 }
 
@@ -1077,15 +1081,15 @@ function renderCards(){
   const p=D.pnl[mes]||{};
   const gopMes=Object.values(D.gastos_op[mes]||{}).reduce((s,v)=>s+v,0);
   const extraMes=Object.values(D.extras[mes]||{}).reduce((s,v)=>s+v,0);
-  const sueldo=p.sueldo||0,bono=p.bono||0;
+  const sueldo=p.sueldo||0,bono=p.bono||0,otrosIng=p.otros_ing||0;
   const netoDep=['2201','1902','2103'].reduce((s,d)=>{const pt=PART[d]||1;return s+((p.arriendos?.[d]||0)-(p.hipotecarios?.[d]||0))*pt;},0)-(p.gastos_admin||0);
   const gp=Object.values(D.gastos_op[prevM(mes)]||{}).reduce((s,v)=>s+v,0);
   const pct=gp?((gopMes-gp)/gp*100):0;
   const delt=pct?`<span style="color:${pct>0?'var(--red)':'var(--green)'}">${pct>0?'↑':'↓'}${Math.abs(pct).toFixed(0)}% vs ant.</span>`:'';
-  const bal=sueldo+bono+netoDep-gopMes-extraMes;
+  const bal=sueldo+bono+otrosIng+netoDep-gopMes-extraMes;
   $('cards').innerHTML=
     crd('var(--red)','Gastos Op.',gopMes,'vr',extraMes>0?'+ '+fk(extraMes)+' extraord.':'sin extraordinarios',delt)+
-    crd('var(--green)','Ingresos',sueldo+bono,'vg',bono?fk(sueldo)+' sueldo + '+fk(bono)+' bono':'sueldo mensual','')+
+    crd('var(--green)','Ingresos',sueldo+bono+otrosIng,'vg',bono?fk(sueldo)+' sueldo + '+fk(bono)+' bono':'sueldo mensual','')+
     crd(netoDep>=0?'var(--teal)':'var(--amber)','Deptos (neto)',netoDep,netoDep>=0?'vt':'va','2201×100% + 1902/2103×50%','')+
     crd(bal>=0?'var(--green)':'var(--red)','Balance',bal,bal>=0?'vg':'vr','ingresos + deptos − gastos','');
 }
@@ -1181,7 +1185,8 @@ function renderPnl(){
   sec('Ingresos');
   row('Sueldo',M.map(m=>D.pnl[m]?.sueldo||null),'pos',true,false,null,null,'sueldo');
   row('Bono / Otros',M.map(m=>D.pnl[m]?.bono||null),'pos',true,false,null,null,'bono_otro');
-  row('Total',M.map(m=>((D.pnl[m]?.sueldo||0)+(D.pnl[m]?.bono||0))||null),'pos',false,true,null,null);
+  {const anyO=M.some(m=>(D.pnl[m]?.otros_ing||0)>0);if(anyO)row('Otros ingresos',M.map(m=>D.pnl[m]?.otros_ing||null),'pos',true,false,null,null);}
+  row('Total',M.map(m=>((D.pnl[m]?.sueldo||0)+(D.pnl[m]?.bono||0)+(D.pnl[m]?.otros_ing||0))||null),'pos',false,true,null,null);
 
   // Gastos op — orden personalizado, Otros siempre al final, sin duplicados
   sec('Gastos operacionales');
@@ -1222,7 +1227,7 @@ function renderPnl(){
     const gop=Object.values(D.gastos_op[m]||{}).reduce((s,v)=>s+v,0);
     const ext=Object.values(D.extras[m]||{}).reduce((s,v)=>s+v,0);
     const nd2=['2201','1902','2103'].reduce((s,d)=>{const pt=PART[d]||1;return s+((p.arriendos?.[d]||0)-(p.hipotecarios?.[d]||0))*pt;},0)-(p.gastos_admin||0);
-    return ((p.sueldo||0)+(p.bono||0)+nd2-gop-ext)||null;
+    return ((p.sueldo||0)+(p.bono||0)+(p.otros_ing||0)+nd2-gop-ext)||null;
   });
   row('Balance neto',bal,'',false,true,null,null);
   h+='</tbody>';
@@ -1262,7 +1267,7 @@ function renderPnlCasa(){
     return r.length?r.reduce((s,v)=>s+v,0)/r.length:null;
   }
 
-  function row(lbl,vals,cls,isSub,isBold,concepto){
+  function row(lbl,vals,cls,isSub,isBold,concepto,editPagPor){
     const av=avg(vals);
     const hasItems=concepto&&D.items_casa&&M.some(m=>D.items_casa[m]?.[concepto]);
     const expanded=expandedConcepts['casa_'+(concepto||'')];
@@ -1275,6 +1280,11 @@ function renderPnlCasa(){
     h+=`<td${isBold?' style="font-weight:600"':''}${mvAttrs}>${lbl}${expBtn}</td>`;
     vals.forEach((v,i)=>{
       const m=M[i];
+      if(editPagPor&&m){
+        h+=`<td class="pos clickable" onclick="openCasaAporteEdit('${editPagPor}','${m}')" title="Click para editar/agregar">`;
+        h+=v?fclp(v):`<span style="color:var(--text3);font-size:10px">+ agregar</span>`;
+        h+=`</td>`;return;
+      }
       if(!v){h+=`<td class="neu">—</td>`;return;}
       const click=concepto&&m&&!isBold;
       h+=`<td class="${cls}${click?' clickable':''}"${click?` data-cc="${concepto}" data-mm="${m}" data-pp="casa" onclick="cellClick(this)"`:''}>${fclp(v)}</td>`;
@@ -1298,8 +1308,8 @@ function renderPnlCasa(){
 
   // Ingresos
   sec('Ingresos');
-  row('Seba (pagos directos)',M.map(m=>D.pnl_casa[m]?.seba||null),'pos',true,false,null);
-  row('Bea (transferencia)',M.map(m=>D.pnl_casa[m]?.bea||null),'pos',true,false,null);
+  row('Seba',M.map(m=>D.pnl_casa[m]?.seba||null),'pos',true,false,null,'Seba');
+  row('Bea',M.map(m=>D.pnl_casa[m]?.bea||null),'pos',true,false,null,'Bea');
   row('Total',M.map(m=>D.pnl_casa[m]?.total_aportes||null),'pos',false,true,null);
 
   // Gastos sin ocio
@@ -1691,19 +1701,36 @@ function renderGopCasa(){
 function renderOcioCasa(){
   const M=getMesesToShow(D.meses_all_casa||[]);
   const ocioC=['Comida Afuera','Panoramas','Viajes/Playa','Carrete'];
+  ocioC.forEach(c=>{if(CV['o_'+c]===undefined)CV['o_'+c]=true;});
   if(CH.ocioCasa)CH.ocioCasa.destroy();
   CH.ocioCasa=new Chart($('c-ocio-casa').getContext('2d'),{
     type:'bar',data:{labels:M.map(mlbl),datasets:ocioC.map(c=>{
-      return {label:c,data:M.map(m=>D.gastos_casa[m]?.ocio[c]||0),
+      return {label:c,hidden:!CV['o_'+c],data:M.map(m=>D.gastos_casa[m]?.ocio[c]||0),
         backgroundColor:cc(c),borderRadius:2,stack:'o'};
     })},
     options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{labels:{color:'#555',font:{size:10},boxWidth:10,padding:6}},
+      plugins:{legend:{display:false},
         tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+fabs(ctx.raw)}}},
       scales:{
         x:{stacked:true,ticks:{color:'#444',font:{size:9}},grid:{color:'rgba(255,255,255,.03)'}},
         y:{stacked:true,ticks:{color:'#444',font:{size:9},callback:v=>'$'+(v/1e6).toFixed(1)+'M'},grid:{color:'rgba(255,255,255,.03)'}}
       }}
+  });
+  // Legend panel igual que sin-ocio
+  const leg=$('leg-ocio-casa');
+  leg.innerHTML=ocioC.map(c=>{
+    const vis=CV['o_'+c]!==false;
+    return '<div class="leg-item'+(vis?'':' off')+'" data-key="o_'+c+'"><div class="leg-dot" style="background:'+cc(c)+'"></div><span class="leg-label">'+c+'</span></div>';
+  }).join('');
+  leg.querySelectorAll('.leg-item').forEach(el=>{
+    el.onclick=()=>{
+      const k=el.dataset.key;
+      CV[k]=!CV[k];
+      const lbl=k.replace('o_','');
+      const ds=CH.ocioCasa?.data.datasets.find(x=>x.label===lbl);
+      if(ds){ds.hidden=!CV[k];CH.ocioCasa.update();}
+      el.classList.toggle('off',!CV[k]);
+    };
   });
   const vals=M.map(m=>Object.values(D.gastos_casa[m]?.ocio||{}).reduce((s,v)=>s+v,0)).filter(v=>v>0);
   $('meta-ocio-casa').textContent='Promedio ocio: '+fk(vals.length?vals.reduce((s,v)=>s+v,0)/vals.length:0)+' / mes';
@@ -2628,10 +2655,10 @@ function renderPendientes() {
               <option value="Bea"${p.pagado_por==='Bea'?' selected':''}>Bea</option>
             </select>
           </div>
-          <div class="pf" style="min-width:100px"><label>Reembolso</label>
+          <div class="pf" style="min-width:100px"><label>Estado</label>
             <select onchange="updatePend('${p.id}','reembolsado',parseInt(this.value))">
               <option value="0"${!p.reembolsado?' selected':''}>Pendiente</option>
-              <option value="1"${p.reembolsado?' selected':''}>Saldado</option>
+              <option value="1"${p.reembolsado?' selected':''}>Saldado ✓</option>
             </select>
           </div>`:''}
         </div>
@@ -3049,6 +3076,22 @@ function filtH() {
 
 
 
+// ── CASA APORTES EDITOR ──────────────────────────────────────────────
+function openCasaAporteEdit(pagadoPor, mes){
+  const[y,mo]=mes.split('-').map(Number);
+  const existing=D.hist.find(h=>h.planilla==='casa'&&h.tipo==='ingreso'
+    &&h.pagado_por===pagadoPor&&h.año===y&&h.mes===mo);
+  if(existing){openMod(existing.id);return;}
+  _ingMeta={subtipo:null,mes,concepto:null,pagadoPor};
+  $('ing-title').textContent='Agregar aporte '+pagadoPor+' — '+mlbl(mes);
+  $('ing-monto').value='';
+  const lastDay=new Date(y,mo,0).getDate();
+  $('ing-fecha').value=y+'-'+String(mo).padStart(2,'0')+'-'+String(lastDay).padStart(2,'0');
+  $('ing-comentario').value='';
+  $('ing-status').textContent='';
+  $('modal-ingreso').classList.add('show');
+}
+
 // ── TEMA CLARO/OSCURO ─────────────────────────────────────────────
 function toggleTema(){
   const light=document.body.classList.toggle('light');
@@ -3059,7 +3102,7 @@ function toggleTema(){
 (function(){if(localStorage.getItem('gastos_tema')==='light'){const btn=$('btn-tema');if(btn)btn.textContent='☀️';}})();
 
 // ── INGRESO EDITOR DESDE P&L ──────────────────────────────────────
-let _ingMeta={subtipo:null,mes:null,concepto:null};
+let _ingMeta={subtipo:null,mes:null,concepto:null,pagadoPor:null};
 const _ingLabels={sueldo:'Sueldo',bono_otro:'Bono / Otros',arriendo_2201:'Arriendo Depto 2201',arriendo_1902:'Arriendo Depto 1902',arriendo_2103:'Arriendo Depto 2103'};
 const _ingConceptos={sueldo:'Sueldo',bono_otro:'Bono / Otros',arriendo_2201:'Arriendo 2201',arriendo_1902:'Arriendo 1902',arriendo_2103:'Arriendo 2103'};
 const _ingSubtipos={sueldo:'sueldo',bono_otro:'bono_otro',arriendo_2201:'arriendo_2201',arriendo_1902:'arriendo_1902',arriendo_2103:'arriendo_2103'};
@@ -3080,7 +3123,7 @@ function openIngresoEdit(subtipo,mes){
   // Si ya existe, abrimos el modal de edición estándar
   if(existing){openMod(existing.id);return;}
   // Abrir modal para crear nuevo
-  _ingMeta={subtipo,mes,concepto:_ingConceptos[subtipo]||'Ingreso'};
+  _ingMeta={subtipo,mes,concepto:_ingConceptos[subtipo]||'Ingreso',pagadoPor:null};
   $('ing-title').textContent='Agregar '+(_ingLabels[subtipo]||subtipo)+' — '+mlbl(mes);
   $('ing-monto').value='';
   const lastDay=new Date(y,mo,0).getDate();
@@ -3097,12 +3140,17 @@ async function saveIngreso(){
   const[y,mo]=fecha.split('-').map(Number);
   $('ing-status').textContent='Guardando...';$('ing-status').style.color='var(--text2)';
   const id=String(Date.now())+String(Math.floor(Math.random()*10000));
-  const nuevo={
+  const esCasa=!!_ingMeta.pagadoPor;
+  const nuevo=esCasa?{
+    id,fecha,año:y,mes:mo,
+    planilla:'casa',tipo:'ingreso',
+    subtipo:null,concepto:null,item:null,monto,
+    comentario:$('ing-comentario').value||null,
+    pagado_por:_ingMeta.pagadoPor,reembolsado:'0',medio_pago:null
+  }:{
     id,fecha,año:y,mes:mo,
     planilla:'personal',tipo:'ingreso',
-    subtipo:_ingMeta.subtipo,
-    concepto:_ingMeta.concepto,
-    item:null,monto,
+    subtipo:_ingMeta.subtipo,concepto:_ingMeta.concepto,item:null,monto,
     comentario:$('ing-comentario').value||null,
     pagado_por:null,reembolsado:'0',medio_pago:null
   };
@@ -3115,7 +3163,8 @@ async function saveIngreso(){
     const rows=await r.json();
     D.hist.unshift({...nuevo,id:rows[0]?.id||id,reembolsado:0});
     buildAggregatedData();initSel();initHistSel();upd();
-    if($('sec-pnl').classList.contains('open'))renderPnl();
+    if(esCasa&&$('sec-pnl-casa').classList.contains('open'))renderPnlCasa();
+    else if(!esCasa&&$('sec-pnl').classList.contains('open'))renderPnl();
     $('modal-ingreso').classList.remove('show');
   } else {
     const err=await r.text();
