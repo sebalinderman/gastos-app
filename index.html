@@ -2616,7 +2616,9 @@ function renderPendientes() {
     const conceptosList = p.tipo==='ingreso' ? CONCEPTOS_INGRESO :
                           p.tipo==='inversion' ? CONCEPTOS_INVERSION :
                           CONCEPTOS_GASTO;
-    const itemsList = (ITEMS_DB[p.planilla||'personal']||{})[p.concepto]||[];
+    const _stored = (ITEMS_DB[p.planilla||'personal']||{})[p.concepto]||[];
+    const _hist = p.concepto ? [...new Set(D.hist.filter(h=>h.planilla===(p.planilla||'personal')&&h.concepto===p.concepto&&h.item).map(h=>h.item))] : [];
+    const itemsList = [...new Set([..._stored,..._hist])];
     return `
     <div class="pend-card${p.posible_dup?' dup':''}${p.omitir?' omitido':''}" id="pc-${p.id}" style="${p.omitir?'opacity:.45;':''}">
       <div>
@@ -2649,12 +2651,6 @@ function renderPendientes() {
             <select onchange="updatePend('${p.id}','item',this.value)">
               <option value="">— elegir —</option>
               ${sortOtrosLast(itemsList).map(i=>`<option value="${i}"${p.item===i?' selected':''}>${i}</option>`).join('')}
-            </select>
-          </div>
-          <div class="pf" style="min-width:120px"><label>Medio de Pago</label>
-            <select onchange="updatePend('${p.id}','medio_pago',this.value)">
-              <option value="">— elegir —</option>
-              ${(D.medios_pago||[]).map(m=>`<option value="${m}"${p.medio_pago===m?' selected':''}>${m}</option>`).join('')}
             </select>
           </div>
           <div class="pf" style="min-width:160px;flex:1"><label>Comentario</label>
