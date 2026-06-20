@@ -2568,25 +2568,52 @@ function procesarImagen(input) {
           max_tokens:1500,
           messages:[{role:'user',content:[
             {type:'image',source:{type:'base64',media_type:file.type,data:b64}},
-            {type:'text',text:`Extrae todos los movimientos bancarios visibles. Responde SOLO con JSON array:
+            {type:'text',text:`Extrae TODOS los movimientos bancarios visibles en esta imagen (tabla de cartola/estado de cuenta).
+Incluye tanto cargos/cheques como depósitos/abonos — toma cada fila de la tabla de movimientos, ignora encabezados y filas de resumen de comisiones.
+Los montos están en formato chileno: el PUNTO es separador de miles, NO decimal. Ej: "1.000" = 1000, "255.298" = 255298, "1.400.000" = 1400000.
+Responde SOLO con un JSON array, sin texto adicional ni markdown:
 [{"fecha":"YYYY-MM-DD","descripcion":"...","monto":12345}]
-El monto es SIEMPRE positivo (valor absoluto). Si no hay fecha clara usa null.`}
+- fecha: si solo ves DD/MM sin año, usa el año ${new Date().getFullYear()} (o el año anterior si el mes es posterior al actual)
+- monto: SIEMPRE el número entero positivo, sin puntos ni comas
+- descripcion: el texto completo de la columna de descripción/detalle
+Si la imagen no contiene una tabla de movimientos bancarios reconocible, responde con un array vacío [].`}
           ]}]
         })
       });
       const data = await resp.json();
       const txt = data.content?.find(b=>b.type==='text')?.text||'[]';
-      const movs = JSON.parse(txt.replace(/\`\`\`json?|\`\`\`/g,'').trim());
-      const banco = 'otro';
+      window._lastImgRawResponse = txt;
+      let movs;
+      try {
+        movs = JSON.parse(txt.replace(/\`\`\`json?|\`\`\`/g,'').trim());
+      } catch(parseErr) {
+        // Intentar extraer el array JSON aunque venga con texto alrededor
+        const arrMatch = txt.match(/\[[\s\S]*\]/);
+        if(arrMatch) movs = JSON.parse(arrMatch[0]);
+        else throw new Error('No se pudo parsear la respuesta: '+txt.slice(0,150));
+      }
+      if(!Array.isArray(movs) || movs.length === 0) {
+        $('status-img').style.display='none';
+        input.value='';
+        alert('⚠ No se detectaron movimientos en la imagen.\n\nRevisa que la tabla sea legible (buena resolución, sin cortes) o prueba pegando el texto manualmente en la pestaña "Texto/Pegar".\n\nDetalle técnico (consola F12): window._lastImgRawResponse');
+        return;
+      }
       const planDef = $('src-planilla-default')?.value || 'auto';
       window._batchMovsPending = movs.filter(m=>m.monto&&m.monto!==0).map(m=>({
         ...m, monto_original:m.monto,
         fecha: m.fecha||new Date().toISOString().slice(0,10)
       }));
+      if(!window._batchMovsPending.length) {
+        $('status-img').style.display='none';
+        input.value='';
+        alert('⚠ Se encontraron filas pero ningún monto válido. Revisa la consola (F12) → window._lastImgRawResponse para ver la respuesta cruda.');
+        return;
+      }
       window._batchPlanDef = planDef;
       abrirModalBatch();
     } catch(e) {
-      alert('Error procesando imagen. Prueba pegando el texto manualmente.');
+      console.error('Error procesando imagen:', e);
+      alert('⚠ Error procesando imagen: '+e.message+'\n\nPrueba pegando el texto manualmente en la pestaña "Texto/Pegar".');
     }
     $('status-img').style.display='none';
     input.value='';
@@ -2610,24 +2637,51 @@ function procesarPDF(input) {
           max_tokens:3000,
           messages:[{role:'user',content:[
             {type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}},
-            {type:'text',text:`Extrae TODOS los movimientos bancarios (cargos y abonos) de esta cartola. Responde SOLO con JSON array:
+            {type:'text',text:`Extrae TODOS los movimientos bancarios (cargos y abonos) de esta cartola/estado de cuenta.
+Recorre cada fila de la tabla de movimientos — ignora encabezados, totales, y secciones de resumen de comisiones.
+Los montos están en formato chileno: el PUNTO es separador de miles, NO decimal. Ej: "1.000" = 1000, "255.298" = 255298.
+Responde SOLO con un JSON array, sin texto adicional ni markdown:
 [{"fecha":"YYYY-MM-DD","descripcion":"...","monto":12345}]
-Monto siempre positivo. Incluye tanto cargos como abonos.`}
+- fecha: si solo ves DD/MM sin año, usa el año ${new Date().getFullYear()} (o el año anterior si el mes es posterior al actual)
+- monto: SIEMPRE el número entero positivo, sin puntos ni comas
+- descripcion: el texto completo de la columna de descripción/detalle
+Si el PDF no contiene una tabla de movimientos bancarios reconocible, responde con un array vacío [].`}
           ]}]
         })
       });
       const data = await resp.json();
       const txt = data.content?.find(b=>b.type==='text')?.text||'[]';
-      const movs = JSON.parse(txt.replace(/\`\`\`json?|\`\`\`/g,'').trim());
+      window._lastPdfRawResponse = txt;
+      let movs;
+      try {
+        movs = JSON.parse(txt.replace(/\`\`\`json?|\`\`\`/g,'').trim());
+      } catch(parseErr) {
+        const arrMatch = txt.match(/\[[\s\S]*\]/);
+        if(arrMatch) movs = JSON.parse(arrMatch[0]);
+        else throw new Error('No se pudo parsear la respuesta: '+txt.slice(0,150));
+      }
+      if(!Array.isArray(movs) || movs.length === 0) {
+        $('status-pdf').style.display='none';
+        input.value='';
+        alert('⚠ No se detectaron movimientos en el PDF.\n\nRevisa que el documento sea legible, o prueba copiando el texto manualmente en la pestaña "Texto/Pegar".\n\nDetalle técnico (consola F12): window._lastPdfRawResponse');
+        return;
+      }
       const planDef = $('src-planilla-default')?.value || 'auto';
       window._batchMovsPending = movs.filter(m=>m.monto&&m.monto!==0).map(m=>({
         ...m, monto_original:m.monto,
         fecha: m.fecha||new Date().toISOString().slice(0,10)
       }));
+      if(!window._batchMovsPending.length) {
+        $('status-pdf').style.display='none';
+        input.value='';
+        alert('⚠ Se encontraron filas pero ningún monto válido. Revisa la consola (F12) → window._lastPdfRawResponse para ver la respuesta cruda.');
+        return;
+      }
       window._batchPlanDef = planDef;
       abrirModalBatch();
     } catch(e) {
-      alert('Error procesando PDF.');
+      console.error('Error procesando PDF:', e);
+      alert('⚠ Error procesando PDF: '+e.message+'\n\nPrueba copiando el texto manualmente en la pestaña "Texto/Pegar".');
     }
     $('status-pdf').style.display='none';
     input.value='';
