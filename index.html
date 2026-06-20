@@ -2555,16 +2555,19 @@ function procesarImagen(input) {
   const file = input.files[0];
   if(!file) return;
   $('status-img').style.display='flex';
+  console.log('[procesarImagen] file:', file.name, file.type, (file.size/1024).toFixed(0)+'KB');
+  window._lastImgFileInfo = {name:file.name, type:file.type, sizeKB:Math.round(file.size/1024)};
 
   const reader = new FileReader();
   reader.onload = async (e) => {
     const b64 = e.target.result.split(',')[1];
+    console.log('[procesarImagen] base64 length:', b64.length);
     try {
       const resp = await fetch('https://gastos-proxy.salinderman.workers.dev', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body: JSON.stringify({
-          model:'claude-sonnet-4-20250514',
+          model:'claude-sonnet-4-6',
           max_tokens:1500,
           messages:[{role:'user',content:[
             {type:'image',source:{type:'base64',media_type:file.type,data:b64}},
@@ -2633,7 +2636,7 @@ function procesarPDF(input) {
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body: JSON.stringify({
-          model:'claude-sonnet-4-20250514',
+          model:'claude-sonnet-4-6',
           max_tokens:3000,
           messages:[{role:'user',content:[
             {type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}},
