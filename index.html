@@ -2868,10 +2868,11 @@ function renderPendientes() {
               style="width:100%">
           </div>
           ${esCasa?`
-          <div class="pf" style="min-width:90px"><label>Pagado por</label>
+          <div class="pf" style="min-width:110px"><label>Pagado por</label>
             <select onchange="updatePend('${p.id}','pagado_por',this.value)">
               <option value="Seba"${p.pagado_por==='Seba'?' selected':''}>Seba</option>
               <option value="Bea"${p.pagado_por==='Bea'?' selected':''}>Bea</option>
+              <option value="Familia"${p.pagado_por==='Familia'?' selected':''}>Familia (saldado)</option>
             </select>
           </div>
           <div class="pf" style="min-width:100px"><label>Estado</label>
@@ -2963,23 +2964,18 @@ function updatePend(id, campo, valor) {
   if(campo==='planilla'||campo==='tipo') {
     renderPendientes();
   } else if(campo==='concepto') {
-    // Limpiar ítem si no corresponde al nuevo concepto
+    // Limpiar ítem si no corresponde al nuevo concepto, y re-renderizar
+    // la card completa para que el select de Ítem recalcule sus opciones
     const pl = p.planilla || 'personal';
     const itemsFijos = (ITEMS_DB[pl]||{})[valor] || [];
-    const itemsHist = [...new Set(D.hist.filter(x=>x.concepto===valor).map(x=>x.item).filter(Boolean))];
-    const todosItems = [...new Set([...itemsFijos,...itemsHist])].sort();
-    // Si el ítem actual no existe en el nuevo concepto, limpiarlo
-    if(p.item && !todosItems.includes(p.item)) {
-      p.item = null;
-      const itemInput = document.querySelector(`#pc-${id} input[list="ilist-${id}"]`);
-      if(itemInput) itemInput.value = '';
-    }
-    // Actualizar datalist
-    const ilist = document.getElementById('ilist-'+id);
-    if(ilist) {
-      ilist.innerHTML = todosItems.map(i=>`<option value="${i}">`).join('');
-    }
-    actualizarCxP();
+    const itemsHist = [...new Set(D.hist.filter(x=>x.planilla===pl&&x.concepto===valor).map(x=>x.item).filter(Boolean))];
+    const todosItems = [...new Set([...itemsFijos,...itemsHist])];
+    if(p.item && !todosItems.includes(p.item)) p.item = null;
+    renderPendientes();
+  } else if(campo==='pagado_por') {
+    // Convención: si pagado_por='Familia', el gasto ya está saldado
+    if(valor==='Familia') p.reembolsado = 1;
+    renderPendientes();
   } else {
     actualizarCxP();
   }
