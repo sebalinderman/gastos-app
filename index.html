@@ -880,14 +880,10 @@ function buildAggregatedData(){
   hist.filter(h=>h.planilla==='personal').forEach(h=>{const k=h.año+'-'+String(h.mes).padStart(2,'0');if(h.subtipo==='operacional'&&h.tipo==='gasto'){if(!D.gastos_op[k])D.gastos_op[k]={};const c=h.concepto||'Otros';D.gastos_op[k][c]=(D.gastos_op[k][c]||0)+h.monto;}if(h.subtipo==='extraordinario'&&h.tipo==='gasto'){if(!D.extras[k])D.extras[k]={};const c=h.item||'Otros';D.extras[k][c]=(D.extras[k][c]||0)+h.monto;}});
   D.inversiones_ent={};
   const ENTS=['Fintual','Toesca','Racional','Security','Budacom','Capitaria'];
-  hist.filter(h=>{
-    if(h.planilla!=='personal') return false;
-    if(h.subtipo!=='hipotecario'&&h.subtipo!=='rescate_fondo') return false;
-    // Excluir pagos hipotecarios de departamentos (COOPEUCH + item 'Hipotecario X')
-    const com=(h.comentario||'').toUpperCase();
-    if((h.item||'').startsWith('Hipotecario')||com.includes('COOPEUCH')) return false;
-    return true;
-  }).forEach(h=>{const k=h.año+'-'+String(h.mes).padStart(2,'0');if(!D.inversiones_ent[k])D.inversiones_ent[k]={aportes:{},rescates:{}};const com=(h.comentario||'').toUpperCase();let ent='Otros';for(const e of ENTS){if(com.includes(e.toUpperCase())){ent=e;break;}}if(h.subtipo==='hipotecario')D.inversiones_ent[k].aportes[ent]=(D.inversiones_ent[k].aportes[ent]||0)+h.monto;else D.inversiones_ent[k].rescates[ent]=(D.inversiones_ent[k].rescates[ent]||0)+h.monto;});
+  // 'hipotecario' y 'gasto_depto' NUNCA entran aquí (son pagos de dividendo/GGCC de deptos,
+  // van al P&L de Departamentos). Solo fondos de inversión: aporte_fondo / rescate_fondo.
+  hist.filter(h=>h.planilla==='personal'&&(h.subtipo==='aporte_fondo'||h.subtipo==='rescate_fondo'))
+  .forEach(h=>{const k=h.año+'-'+String(h.mes).padStart(2,'0');if(!D.inversiones_ent[k])D.inversiones_ent[k]={aportes:{},rescates:{}};const com=(h.comentario||'').toUpperCase();let ent='Otros';for(const e of ENTS){if(com.includes(e.toUpperCase())){ent=e;break;}}if(h.subtipo==='aporte_fondo')D.inversiones_ent[k].aportes[ent]=(D.inversiones_ent[k].aportes[ent]||0)+h.monto;else D.inversiones_ent[k].rescates[ent]=(D.inversiones_ent[k].rescates[ent]||0)+h.monto;});
   D.gastos_casa={};D.pnl_casa={};
   D.meses_all_casa.forEach(m=>{const[y,mo]=m.split('-').map(Number);const rows=hist.filter(h=>h.planilla==='casa'&&h.año===y&&h.mes===mo);const sin={},ocio={};rows.forEach(h=>{const neto=h.tipo==='gasto'?h.monto:h.tipo==='devolucion'?-h.monto:0;if(neto<=0)return;const c=h.concepto||'Otros';if(OCIO.has(c))ocio[c]=(ocio[c]||0)+neto;else sin[c]=(sin[c]||0)+neto;});D.gastos_casa[m]={sin_ocio:sin,ocio:ocio};const tS=Object.values(sin).reduce((s,v)=>s+v,0),tO=Object.values(ocio).reduce((s,v)=>s+v,0);const apS=rows.filter(h=>h.tipo==='ingreso'&&h.pagado_por==='Seba').reduce((s,h)=>s+h.monto,0);const apB=rows.filter(h=>h.tipo==='ingreso'&&h.pagado_por==='Bea').reduce((s,h)=>s+h.monto,0);D.pnl_casa[m]={gastos_sin_ocio:sin,gastos_ocio:ocio,total_sin_ocio:tS,total_ocio:tO,total_gastos:tS+tO,seba:apS,bea:apB,total_aportes:apS+apB,saldo:apS+apB-(tS+tO)};});
   D.items_personal={};D.items_casa={};
@@ -921,7 +917,7 @@ async function bootApp(){
 
 
 
-const CONCEPTOS_DB={"personal": ["Carrete", "Casa", "Comida", "Comida Afuera", "Compras", "Deporte", "Perros", "Pichilemu", "Salud", "Transporte", "Viajes/Playa", "Otros"], "casa": ["Casa", "Eloísa", "Regalos", "Salud", "Supermercado", "Suscripciones", "Terreno", "Transporte", "Comida Afuera", "Panoramas", "Carrete", "Viajes/Playa", "Otros"]};
+const CONCEPTOS_DB={"personal": ["Carrete", "Casa", "Comida", "Comida Afuera", "Compras", "Deporte", "Extraordinarios", "Perros", "Pichilemu", "Salud", "Transporte", "Viajes/Playa", "Otros"], "casa": ["Casa", "Eloísa", "Regalos", "Salud", "Supermercado", "Suscripciones", "Terreno", "Transporte", "Comida Afuera", "Panoramas", "Carrete", "Viajes/Playa", "Otros"]};
 const ITEMS_DB={"personal": {"Comida": ["Almuerzo", "Snack", "Chinos", "Master Rod", "Desayuno", "Café", "Otros"], "Transporte": ["Uber/Cabify", "Bencina", "Tag", "Seguros", "Mantenciones", "Didi", "Metro", "Documentos", "Parking", "Otros"], "Deporte": ["Pádel", "Gimnasio", "Indumentaria", "Carrera", "DeCero", "Bici", "Suplementos", "Golf", "Otros"], "Compras": ["Regalos", "Ropa", "Personal", "Suscripciones", "Ropa Pega", "Otros"], "Salud": ["Corte de Pelo", "Farmacia", "Doctor", "Dentista", "Otros"], "Carrete": ["Casa", "Bar", "Bar/Disco", "Copete", "Asado", "Matrimonio", "Disco", "Bajón", "Taxi", "Otros"], "Comida Afuera": ["Restaurante", "Delivery", "Café", "Otros"], "Viajes/Playa": ["Splitwise", "Comidas/Compras", "Alojamiento", "Bus", "Pasajes", "Otros"], "Inversiones": ["Hipotecario 1902", "Hipotecario 2201", "Hipotecario 2103", "Otras Inversiones", "GGCC/SSBB/Otros", "Contribuciones 1902", "Contribuciones 2201", "Contribuciones 2103"], "Otros": ["Gastos Bancarios", "Donaciones", "Seguros", "Parte", "Chat GPT", "Tintorería", "Impuestos", "Otros"], "Perros": ["Comida", "Veterinario", "Otros"], "Pichilemu": ["Casa", "Cosas Casa", "Otros"], "Eloísa": ["Clínica", "Compras", "Farmacia", "Salud", "Doctor", "Leche", "Otros"], "Extraordinarios": ["Vacaciones", "Bici/Moto", "Estudios", "Imponderables", "Otros"], "Casa": ["Comida u Otro", "Compras Generales", "Otros"]}, "casa": {"Casa": ["Arriendo", "Gastos Comunes", "Nana", "Agua", "Luz", "Gas", "Internet", "Compras Casa", "Otros"], "Supermercado": ["Líder", "Tottus", "Ok Market", "Oxxo", "Cuk", "Copec", "Unimarc", "Jumbo", "Otros"], "Transporte": ["Bencina", "Uber/Cabify/Didi", "Tag", "Seguros", "Estacionamiento", "Mantenciones", "Otros"], "Suscripciones": ["Spotify", "Netflix", "Zapping", "Apple", "Otros"], "Comida Afuera": ["Restaurante", "Niu Sushi", "Sushi", "Nelí", "Otros"], "Viajes/Playa": ["Supermercado", "Splitwise", "Bus", "Alojamiento", "Cafés", "Otros"], "Eloísa": ["Clínica", "Compras", "Farmacia", "Salud", "Doctor", "Leche", "Otros"], "Regalos": ["Matrimonio", "Cumpleaños", "Bautizo", "Baby shower", "Navidad", "Otros"], "Carrete": ["Bar/Disco", "Bar", "Asado", "Carrete Casa", "Otros"], "Salud": ["Farmacia", "Doctor", "Dentista", "Otros"], "Panoramas": ["Cine", "Otros"], "Terreno": ["GGCC", "Otros"], "Otros": ["Gastos Bancarios", "Seguros", "Otros"]}};
 const PART={"2201": 1.0, "1902": 0.5, "2103": 0.5};
 const CATCOL={"Comida": "#60A5FA", "Transporte": "#FBBF24", "Perros": "#F472B6", "Pichilemu": "#34D399", "Deporte": "#F87171", "Carrete": "#A78BFA", "Comida Afuera": "#FB923C", "Salud": "#2DD4BF", "Viajes/Playa": "#818CF8", "Compras": "#E879F9", "Otros": "#6B7280", "Casa": "#94A3B8", "Elo\u00edsa": "#F472B6"};
@@ -2064,6 +2060,7 @@ function saveMod(){
   h.tipo=$('et').value;
   h.concepto=$('ec').value||null;
   h.item=$('ei').value||null;
+  h.subtipo=derivarSubtipo(h.tipo, h.concepto, h.item, undefined, h.subtipo);
   h.medio_pago=$('emed').value||null;
   h.pagado_por=$('epag').value||null;
   h.comentario=$('eco').value||null;
@@ -2458,6 +2455,36 @@ function parsearCartola(texto, banco) {
   }
   return movs;
 }
+// ── derivarSubtipo: fuente única de verdad para el campo subtipo ──
+// Se llama en TODO punto donde se crea o edita un movimiento (crearPendiente,
+// agregarManual, updatePend, saveMod) para que nunca quede desincronizado del
+// tipo/concepto/item real. montoOriginal (signado: -=cargo/sale, +=abono/entra)
+// es opcional; cuando no está disponible (ej. editando historial confirmado),
+// se preserva subtipoActual si ya es válido, o se usa un fallback razonable.
+function derivarSubtipo(tipo, concepto, item, montoOriginal, subtipoActual) {
+  if(tipo === 'gasto') {
+    return concepto === 'Extraordinarios' ? 'extraordinario' : 'operacional';
+  }
+  if(tipo === 'inversion' && concepto === 'Inversiones') {
+    const it = item || '';
+    if(it.startsWith('Hipotecario')) return 'hipotecario';
+    if(it.startsWith('Contribuciones') || it === 'GGCC/SSBB/Otros') return 'gasto_depto';
+    // Fondos de inversión (Fintual/Toesca/Racional/Security/Capitaria/Budacom/Otras Inversiones):
+    // signo negativo = aporte (sale plata de la cuenta), positivo = rescate (vuelve plata)
+    if(montoOriginal !== undefined && montoOriginal !== null) {
+      return montoOriginal < 0 ? 'aporte_fondo' : 'rescate_fondo';
+    }
+    if(subtipoActual==='aporte_fondo'||subtipoActual==='rescate_fondo') return subtipoActual;
+    return 'aporte_fondo';
+  }
+  if(tipo === 'ingreso') {
+    if(concepto === 'Sueldo') return 'sueldo';
+    if(concepto === 'Bono / Otros') return 'bono_otro';
+    if((concepto||'').startsWith('Arriendo ')) return 'arriendo_'+concepto.replace('Arriendo ','');
+    return null;
+  }
+  return null;
+}
 function clasificar(desc, monto, bancoPlanilla) {
   const d = (desc||'').toUpperCase();
 
@@ -2473,7 +2500,12 @@ function clasificar(desc, monto, bancoPlanilla) {
   }
 
   // Ingresos: transferencias recibidas con monto positivo
+  // Respeta la cuenta de origen seleccionada (bancoPlanilla): si es la cuenta de Casa,
+  // se clasifica directo como aporte de Casa (sin concepto/item, se identifica por pagado_por)
   if(monto > 0 && /^TRANSF DE|^ABONO|^DEPOSITO/.test(d)) {
+    if(bancoPlanilla === 'casa') {
+      return { planilla:'casa', tipo:'ingreso', concepto:null, item:null };
+    }
     return { planilla:'personal', tipo:'ingreso', concepto:'Ingreso', item:'Otros' };
   }
 
@@ -2489,7 +2521,7 @@ function clasificar(desc, monto, bancoPlanilla) {
       const planilla = bancoPlanilla!=='auto' ? bancoPlanilla : (r.planilla||'personal');
       const tipo = r.concepto==='transferencia_interna'?'transferencia_interna':
                    r.concepto==='Inversiones'?'inversion':'gasto';
-      const rSubtipo = r.concepto==='Inversiones'?'hipotecario':null;
+      const rSubtipo = derivarSubtipo(tipo, r.concepto, r.item, monto);
       return { planilla, tipo, subtipo: rSubtipo, concepto: r.concepto, item: r.item };
     }
   }
@@ -2515,7 +2547,21 @@ function crearPendiente(mov, clasificacion) {
   const planilla = esBea ? 'casa' : (clasificacion.planilla || 'personal');
   const concepto = esBea ? (clasificacion.concepto || null) : clasificacion.concepto;
   const tipo = clasificacion.tipo || 'gasto';
-  const subtipo = clasificacion.subtipo || (tipo === 'gasto' ? 'operacional' : null);
+  const subtipo = clasificacion.subtipo || derivarSubtipo(tipo, concepto, clasificacion.item, mov.monto_original);
+  // Detectar pagado_por por nombre en la descripción para aportes de Casa
+  let pagadoPor = null;
+  if(planilla === 'casa') {
+    if(esBea) {
+      pagadoPor = 'Seba'; // tarjeta de extensión la usa Bea, pero la paga Seba
+    } else if(tipo === 'ingreso') {
+      const dU = (mov.descripcion||'').toUpperCase();
+      if(/BEATRIZ|\bBEA\b/.test(dU)) pagadoPor = 'Bea';
+      else if(/SEBASTIAN|LINDERMAN|\bSEBA\b/.test(dU)) pagadoPor = 'Seba';
+      else pagadoPor = null; // ambiguo: dejar que el usuario elija
+    } else {
+      pagadoPor = 'Seba'; // default histórico para gastos de Casa
+    }
+  }
   return {
     id: String(Date.now()) + String(Math.floor(Math.random()*10000)),
     ...mov,
@@ -2524,7 +2570,7 @@ function crearPendiente(mov, clasificacion) {
     subtipo,
     concepto,
     item: clasificacion.item,
-    pagado_por: planilla==='casa' ? 'Seba' : null,
+    pagado_por: pagadoPor,
     reembolsado: 0,
     posible_dup: dup || null,
     confirmado: false,
@@ -2716,8 +2762,9 @@ function confirmarBatch() {
     const clas = clasificar(mov.descripcion, mov.monto_original, planDef);
     const p = crearPendiente(mov, clas);
     p.medio_pago = medio || null;
-    // Pagado por override solo si es casa
-    if(p.planilla === 'casa') {
+    // Pagado por del modal aplica solo a gastos de Casa (quién fronteó el gasto).
+    // Los ingresos/aportes de Casa mantienen la detección automática por nombre de crearPendiente.
+    if(p.planilla === 'casa' && p.tipo !== 'ingreso') {
       p.pagado_por = pagadoPor;
       p.reembolsado = pagadoPor === 'Familia' ? 1 : 0;
     }
@@ -2757,7 +2804,7 @@ function agregarManual() {
     monto_original: parseFloat($('man-monto').value)||0,
     planilla,
     tipo: $('man-tipo').value,
-    subtipo: $('man-tipo').value === 'gasto' ? 'operacional' : null,
+    subtipo: derivarSubtipo($('man-tipo').value, $('man-concepto').value||null, $('man-item').value||null, undefined),
     concepto: $('man-concepto').value || null,
     item: $('man-item').value || null,
     medio_pago: $('man-medio').value || null,
@@ -2819,6 +2866,7 @@ function renderPendientes() {
 
   $('pend-list').innerHTML = pendientes.map(p=>{
     const esCasa = p.planilla==='casa';
+    const esCasaIngreso = esCasa && p.tipo==='ingreso';
     const CONCEPTOS_INGRESO = ['Sueldo','Bono / Otros','Arriendo 1902','Arriendo 2201','Arriendo 2103','Ingreso'];
     const CONCEPTOS_INVERSION = ['Inversiones'];
     const CONCEPTOS_GASTO = CONCEPTOS_DB[p.planilla||'personal']||[];
@@ -2850,6 +2898,7 @@ function renderPendientes() {
               ).join('')}
             </select>
           </div>
+          ${!esCasaIngreso?`
           <div class="pf" style="min-width:130px"><label>Concepto</label>
             <select onchange="updatePend('${p.id}','concepto',this.value)">
               <option value="">— elegir —</option>
@@ -2861,26 +2910,31 @@ function renderPendientes() {
               <option value="">— elegir —</option>
               ${sortOtrosLast(itemsList).map(i=>`<option value="${i}"${p.item===i?' selected':''}>${i}</option>`).join('')}
             </select>
-          </div>
+          </div>`:`
+          <div class="pf" style="min-width:200px"><label>Aporte de</label>
+            <div style="font-size:11px;color:var(--text3);padding:6px 0">Identificado solo por "Pagado por" →</div>
+          </div>`}
           <div class="pf" style="min-width:160px;flex:1"><label>Comentario</label>
             <input type="text" value="${(p.descripcion||'').replace(/"/g,'&quot;')}"
               onchange="updatePend('${p.id}','descripcion',this.value)"
               style="width:100%">
           </div>
           ${esCasa?`
-          <div class="pf" style="min-width:110px"><label>Pagado por</label>
+          <div class="pf" style="min-width:130px"><label>${esCasaIngreso?'Aportó':'Pagado por'}</label>
             <select onchange="updatePend('${p.id}','pagado_por',this.value)">
+              <option value="">— elegir —</option>
               <option value="Seba"${p.pagado_por==='Seba'?' selected':''}>Seba</option>
               <option value="Bea"${p.pagado_por==='Bea'?' selected':''}>Bea</option>
-              <option value="Familia"${p.pagado_por==='Familia'?' selected':''}>Familia (saldado)</option>
+              ${esCasaIngreso?'':`<option value="Familia"${p.pagado_por==='Familia'?' selected':''}>Familia (saldado)</option>`}
             </select>
           </div>
+          ${esCasaIngreso?'':`
           <div class="pf" style="min-width:100px"><label>Estado</label>
             <select onchange="updatePend('${p.id}','reembolsado',parseInt(this.value))">
               <option value="0"${!p.reembolsado?' selected':''}>Pendiente</option>
               <option value="1"${p.reembolsado?' selected':''}>Saldado ✓</option>
             </select>
-          </div>`:''}
+          </div>`}`:''}
         </div>
       </div>
       <div class="pend-actions">
@@ -2962,6 +3016,7 @@ function updatePend(id, campo, valor) {
   if(!p) return;
   p[campo] = valor;
   if(campo==='planilla'||campo==='tipo') {
+    p.subtipo = derivarSubtipo(p.tipo, p.concepto, p.item, p.monto_original, p.subtipo);
     renderPendientes();
   } else if(campo==='concepto') {
     // Limpiar ítem si no corresponde al nuevo concepto, y re-renderizar
@@ -2971,7 +3026,11 @@ function updatePend(id, campo, valor) {
     const itemsHist = [...new Set(D.hist.filter(x=>x.planilla===pl&&x.concepto===valor).map(x=>x.item).filter(Boolean))];
     const todosItems = [...new Set([...itemsFijos,...itemsHist])];
     if(p.item && !todosItems.includes(p.item)) p.item = null;
+    p.subtipo = derivarSubtipo(p.tipo, p.concepto, p.item, p.monto_original, p.subtipo);
     renderPendientes();
+  } else if(campo==='item') {
+    p.subtipo = derivarSubtipo(p.tipo, p.concepto, p.item, p.monto_original, p.subtipo);
+    actualizarCxP();
   } else if(campo==='pagado_por') {
     // Convención: si pagado_por='Familia', el gasto ya está saldado
     if(valor==='Familia') p.reembolsado = 1;
