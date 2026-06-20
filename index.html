@@ -487,7 +487,7 @@ Ejemplos:
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
           <div class="pf"><label>Planilla</label>
-            <select id="man-planilla">
+            <select id="man-planilla" onchange="toggleManCasaFields()">
               <option value="personal">Personal</option>
               <option value="casa">Casa</option>
             </select>
@@ -513,6 +513,11 @@ Ejemplos:
         </div>
         <div class="pf" style="margin-bottom:10px"><label>Descripción / Comentario</label>
           <input type="text" id="man-desc" placeholder="COPEC LAS CONDES">
+        </div>
+        <div class="pf" style="margin-bottom:10px"><label>Medio de Pago</label>
+          <select id="man-medio">
+            <option value="">— elegir —</option>
+          </select>
         </div>
         <div id="man-casa-fields" style="display:none;background:var(--bg3);border-radius:8px;padding:10px;margin-bottom:10px">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
@@ -2157,6 +2162,7 @@ function swSource(id, btn) {
     const el=$('src-'+s);
     if(el) el.style.display = s===id?'block':'none';
   });
+  if(id==='manual'){ poblarManMedio(); toggleManCasaFields(); }
 }
 function parseMonto(s) {
   // Maneja formatos chilenos: 1.234.567 o 1,234,567 o 1234567
@@ -2535,20 +2541,15 @@ function procesarTexto() {
 
   setTimeout(() => {
     const movs = parsearCartola(txt, banco);
+    $('status-texto').style.display='none';
     if(!movs.length) {
-      $('status-texto').style.display='none';
       alert('No se detectaron movimientos. Verifica el formato.');
       return;
     }
-
-    for(const mov of movs) {
-      const clas = clasificar(mov.descripcion, mov.monto_original, planDef);
-      pendientes.push(crearPendiente(mov, clas));
-    }
-
-    $('status-texto').style.display='none';
+    window._batchMovsPending = movs;
+    window._batchPlanDef = planDef;
     $('txt-cartola').value='';
-    renderPendientes();
+    abrirModalBatch();
   }, 300);
 }
 function procesarImagen(input) {
@@ -2577,7 +2578,7 @@ Los montos están en formato chileno: el PUNTO es separador de miles, NO decimal
 Responde SOLO con un JSON array, sin texto adicional ni markdown:
 [{"fecha":"YYYY-MM-DD","descripcion":"...","monto":12345}]
 - fecha: si solo ves DD/MM sin año, usa el año ${new Date().getFullYear()} (o el año anterior si el mes es posterior al actual)
-- monto: SIEMPRE el número entero positivo, sin puntos ni comas
+- monto: número entero sin puntos ni comas. NEGATIVO si es un cargo/cheque/pago que SALE de la cuenta, POSITIVO si es un abono/depósito que ENTRA a la cuenta.
 - descripcion: el texto completo de la columna de descripción/detalle
 Si la imagen no contiene una tabla de movimientos bancarios reconocible, responde con un array vacío [].`}
           ]}]
@@ -2603,8 +2604,10 @@ Si la imagen no contiene una tabla de movimientos bancarios reconocible, respond
       }
       const planDef = $('src-planilla-default')?.value || 'auto';
       window._batchMovsPending = movs.filter(m=>m.monto&&m.monto!==0).map(m=>({
-        ...m, monto_original:m.monto,
-        fecha: m.fecha||new Date().toISOString().slice(0,10)
+        fecha: m.fecha||new Date().toISOString().slice(0,10),
+        descripcion: m.descripcion,
+        monto_original: m.monto,
+        monto: Math.abs(m.monto)
       }));
       if(!window._batchMovsPending.length) {
         $('status-img').style.display='none';
@@ -2646,7 +2649,7 @@ Los montos están en formato chileno: el PUNTO es separador de miles, NO decimal
 Responde SOLO con un JSON array, sin texto adicional ni markdown:
 [{"fecha":"YYYY-MM-DD","descripcion":"...","monto":12345}]
 - fecha: si solo ves DD/MM sin año, usa el año ${new Date().getFullYear()} (o el año anterior si el mes es posterior al actual)
-- monto: SIEMPRE el número entero positivo, sin puntos ni comas
+- monto: número entero sin puntos ni comas. NEGATIVO si es un cargo/cheque/pago que SALE de la cuenta, POSITIVO si es un abono/depósito que ENTRA a la cuenta.
 - descripcion: el texto completo de la columna de descripción/detalle
 Si el PDF no contiene una tabla de movimientos bancarios reconocible, responde con un array vacío [].`}
           ]}]
@@ -2671,8 +2674,10 @@ Si el PDF no contiene una tabla de movimientos bancarios reconocible, responde c
       }
       const planDef = $('src-planilla-default')?.value || 'auto';
       window._batchMovsPending = movs.filter(m=>m.monto&&m.monto!==0).map(m=>({
-        ...m, monto_original:m.monto,
-        fecha: m.fecha||new Date().toISOString().slice(0,10)
+        fecha: m.fecha||new Date().toISOString().slice(0,10),
+        descripcion: m.descripcion,
+        monto_original: m.monto,
+        monto: Math.abs(m.monto)
       }));
       if(!window._batchMovsPending.length) {
         $('status-pdf').style.display='none';
@@ -2697,6 +2702,7 @@ function abrirModalBatch() {
   sel.innerHTML = '<option value="">— elegir —</option>' +
     mediosPago.map(m=>`<option value="${m}">${m}</option>`).join('');
   $('modal-batch').classList.add('show');
+  poblarManMedio();
 }
 function confirmarBatch() {
   const medio = $('batch-medio').value;
@@ -2705,7 +2711,9 @@ function confirmarBatch() {
   const movs = window._batchMovsPending || [];
   $('modal-batch').classList.remove('show');
   for(const mov of movs) {
-    const clas = clasificar(mov.descripcion, mov.monto, planDef);
+    // Usar monto_original (signado: + abono / - cargo) para que clasificar()
+    // determine correctamente ingreso vs gasto. mov.monto siempre es positivo (solo display).
+    const clas = clasificar(mov.descripcion, mov.monto_original, planDef);
     const p = crearPendiente(mov, clas);
     p.medio_pago = medio || null;
     // Pagado por override solo si es casa
@@ -2730,6 +2738,16 @@ async function agregarMedioPago() {
   opt.value = n; opt.textContent = n; opt.selected = true;
   sel.appendChild(opt);
 }
+function toggleManCasaFields() {
+  const esCasa = $('man-planilla').value === 'casa';
+  $('man-casa-fields').style.display = esCasa ? 'block' : 'none';
+}
+function poblarManMedio() {
+  const sel = $('man-medio');
+  if(!sel) return;
+  sel.innerHTML = '<option value="">— elegir —</option>' +
+    (mediosPago||[]).map(m=>`<option value="${m}">${m}</option>`).join('');
+}
 function agregarManual() {
   const planilla = $('man-planilla').value;
   const mov = {
@@ -2742,6 +2760,7 @@ function agregarManual() {
     subtipo: $('man-tipo').value === 'gasto' ? 'operacional' : null,
     concepto: $('man-concepto').value || null,
     item: $('man-item').value || null,
+    medio_pago: $('man-medio').value || null,
     pagado_por: planilla==='casa'?$('man-pagado').value:null,
     reembolsado: planilla==='casa'?parseInt($('man-reembolso').value):0,
     posible_dup: esDuplicado({fecha:$('man-fecha').value,monto:parseFloat($('man-monto').value)||0}),
