@@ -2323,9 +2323,44 @@ function parsearCartola(texto, banco) {
   // El signo se determina comparando saldo actual vs saldo previo (datos en orden descendente)
   const esBCI = banco === 'bci' || lineas.filter(l => /^\d{2}-\d{2}-\d{4}\s/i.test(l.trim())).length >= 2;
   if(esBCI) {
+    // ── Detectar formato columnas separadas (PDF BCI: descripcs arriba, $montos abajo) ──
+    const bciDateLines = lineas.filter(l => /^\d{2}-\d{2}-\d{4}\s+\S/.test(l.trim()));
+    const bciAmtLines  = lineas.filter(l => /^\$[\d.]/.test(l.trim()) && !/^\d{2}-\d{2}-\d{4}/.test(l.trim()));
+    if(bciDateLines.length >= 2 && bciAmtLines.length >= 2) {
+      const txsCS = [];
+      bciDateLines.forEach((dl, i) => {
+        const dtParts = dl.trim().split(/\s+/);
+        const fecha = parseFecha(dtParts[0]);
+        if(!fecha) return;
+        const desc = dtParts.slice(1).join(' ');
+        const al = bciAmtLines[i];
+        if(!al) return;
+        // Extraer números quitando el $; Chilean format: punto=miles
+        const amounts = al.trim().replace(/\$/g,'').trim().split(/\s+/)
+          .map(v => parseMonto(v)).filter(v => v > 0 && !isNaN(v));
+        if(!amounts.length) return;
+        const monto  = amounts[0];
+        const saldo  = amounts.length > 1 ? amounts[amounts.length-1] : null;
+        txsCS.push({ fecha, desc, monto, saldo });
+      });
+      if(txsCS.length >= 2) {
+        for(let i=0; i<txsCS.length; i++) {
+          const t = txsCS[i];
+          if(!t.monto || !t.desc) continue;
+          if(/^(fecha|monto|saldo|cargo|abono)/i.test(t.desc)) continue;
+          const esAbono = i < txsCS.length-1
+            ? (t.saldo != null ? t.saldo > txsCS[i+1].saldo : false)
+            : (t.saldo||0) >= t.monto;
+          movs.push({ fecha:t.fecha, descripcion:t.desc,
+            monto_original: esAbono ? t.monto : -t.monto, monto: t.monto });
+        }
+        if(movs.length) return movs;
+      }
+    }
+    // ── Formato inline (DD-MM-YYYY desc serie monto saldo en misma o próxima línea) ──
     const txs = [];
     let cur = null;
-    const skipLine = /^(fecha|abono a la|cargo a la|descripci|corriente|cartola|https|bci\s|mostrar|graficar|serv|monto\s?\$|saldo\s|ecol)/i;
+    const skipLine = /^(fecha|abono a la|cargo a la|descripci|corriente|cartola|https|bci\s|mostrar|graficar|serv|monto\s?\$|saldo\s|ecol|sebastian|cuenta\s)/i;
 
     for(const linea of lineas) {
       const l = linea.trim();
@@ -2682,8 +2717,9 @@ Los montos están en formato chileno: el PUNTO es separador de miles, NO decimal
 Responde SOLO con un JSON array, sin texto adicional ni markdown:
 [{"fecha":"YYYY-MM-DD","descripcion":"...","monto":12345}]
 - fecha: si solo ves DD/MM sin año, usa el año ${new Date().getFullYear()} (o el año anterior si el mes es posterior al actual)
-- monto: número entero sin puntos ni comas. NEGATIVO si es un cargo/cheque/pago que SALE de la cuenta, POSITIVO si es un abono/depósito que ENTRA a la cuenta.
+- monto: número entero sin puntos ni comas. NEGATIVO si es cargo/pago que SALE de la cuenta (columna "Monto cargo" o celdas en rojo), POSITIVO si es abono que ENTRA (columna "Monto abono" o celdas en verde).
 - descripcion: el texto completo de la columna de descripción/detalle
+IMPORTANTE: si la tabla tiene columnas "Monto cargo ($)" y "Monto abono ($)" separadas, para cada fila usa el valor que esté presente y asígnale el signo correspondiente (cargo=negativo, abono=positivo).
 Si la imagen no contiene una tabla de movimientos bancarios reconocible, responde con un array vacío [].`}
           ]}]
         })
@@ -2754,8 +2790,9 @@ Los montos están en formato chileno: el PUNTO es separador de miles, NO decimal
 Responde SOLO con un JSON array, sin texto adicional ni markdown:
 [{"fecha":"YYYY-MM-DD","descripcion":"...","monto":12345}]
 - fecha: si solo ves DD/MM sin año, usa el año ${new Date().getFullYear()} (o el año anterior si el mes es posterior al actual)
-- monto: número entero sin puntos ni comas. NEGATIVO si es un cargo/cheque/pago que SALE de la cuenta, POSITIVO si es un abono/depósito que ENTRA a la cuenta.
+- monto: número entero sin puntos ni comas. NEGATIVO si es cargo/pago que SALE de la cuenta (columna "Monto cargo"), POSITIVO si es abono que ENTRA (columna "Monto abono").
 - descripcion: el texto completo de la columna de descripción/detalle
+IMPORTANTE: si la tabla tiene columnas "Monto cargo ($)" y "Monto abono ($)" separadas, para cada fila usa el valor que esté presente y asígnale el signo correspondiente (cargo=negativo, abono=positivo).
 Si el PDF no contiene una tabla de movimientos bancarios reconocible, responde con un array vacío [].`}
           ]}]
         })
