@@ -571,6 +571,15 @@ Ejemplos:
       <div id="dup-list"></div>
     </div>
 
+    <!-- Historial de cargas -->
+    <div style="margin-bottom:1.5rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.6rem">
+        <div class="section-label" style="margin:0">Registro de cargas</div>
+        <button onclick="borrarCargasLog()" style="font-size:10px;font-family:var(--mono);background:none;border:none;color:var(--text3);cursor:pointer;padding:2px 6px" title="Borrar historial de cargas">✕ Borrar</button>
+      </div>
+      <div id="cargas-log" style="font-size:11px;color:var(--text2);max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px 12px"></div>
+    </div>
+
     <!-- Movimientos pendientes -->
     <div style="margin-top:1.25rem">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
@@ -864,6 +873,29 @@ async function confirmarTodosBackend(movs){
 async function bulkRenameBackend(tipo,pl,viejo,nuevo,conc){try{if(tipo==='concepto')await sbPatchWhere('movimientos','planilla=eq.'+pl+'&concepto=eq.'+encodeURIComponent(viejo),{concepto:nuevo});else await sbPatchWhere('movimientos','planilla=eq.'+pl+'&concepto=eq.'+encodeURIComponent(conc)+'&item=eq.'+encodeURIComponent(viejo),{item:nuevo});}catch(e){console.error(e);}}
 
 // ── BUILD DATA ────────────────────────────────────────────────────
+// Deriva el subtipo efectivo de un movimiento histórico en runtime.
+// Fuente única de verdad para aggregation — no depende de que h.subtipo esté correcto
+// en Supabase, lo que permite que datos legacy (subtipo=null) funcionen igual.
+function efectSubtipo(h) {
+  if(h.subtipo) return h.subtipo;
+  const conc = h.concepto || '', item = h.item || '';
+  if(h.tipo === 'ingreso') {
+    if(conc === 'Sueldo' || item === 'Sueldo') return 'sueldo';
+    if(conc === 'Bono / Otros' || item === 'Bono / Otros') return 'bono_otro';
+    if(conc.startsWith('Arriendo ')) return 'arriendo_' + conc.replace('Arriendo ', '');
+    return null;
+  }
+  if(h.tipo === 'gasto') {
+    if(conc === 'Extraordinarios') return 'extraordinario';
+    return 'operacional';
+  }
+  if(h.tipo === 'inversion' && conc === 'Inversiones') {
+    if(item.startsWith('Hipotecario')) return 'hipotecario';
+    if(item.startsWith('Contribuciones') || item === 'GGCC/SSBB/Otros') return 'gasto_depto';
+    return 'aporte_fondo';
+  }
+  return null;
+}
 function buildAggregatedData(){
   const hist=D.hist;
   const PART={'2201':1.0,'1902':0.5,'2103':0.5};
@@ -875,19 +907,44 @@ function buildAggregatedData(){
   D.pm={};D.cm={};
   hist.forEach(h=>{const k=h.año+'-'+String(h.mes).padStart(2,'0');const o=h.planilla==='personal'?D.pm:D.cm;if(!o[k])o[k]={};o[k][h.tipo]=(o[k][h.tipo]||0)+h.monto;});
   D.pnl={};
-  D.meses_all.forEach(m=>{const[y,mo]=m.split('-').map(Number);const rows=hist.filter(h=>h.planilla==='personal'&&h.año===y&&h.mes===mo);D.pnl[m]={sueldo:rows.filter(h=>h.subtipo==='sueldo').reduce((s,h)=>s+h.monto,0),bono:rows.filter(h=>h.subtipo==='bono_otro').reduce((s,h)=>s+h.monto,0),otros_ing:rows.filter(h=>h.tipo==='ingreso'&&h.subtipo!=='sueldo'&&h.subtipo!=='bono_otro'&&!(h.subtipo||'').startsWith('arriendo_')&&!(h.concepto||'').startsWith('Arriendo ')).reduce((s,h)=>s+h.monto,0),arriendos:{},hipotecarios:{},gastos_admin:0};rows.filter(h=>h.tipo==='ingreso'&&h.subtipo?.startsWith('arriendo_')).forEach(h=>{const d=h.concepto?.replace('Arriendo ','');if(d)D.pnl[m].arriendos[d]=(D.pnl[m].arriendos[d]||0)+h.monto;});rows.filter(h=>h.subtipo==='hipotecario').forEach(h=>{const d=h.item?.replace('Hipotecario ','');if(d)D.pnl[m].hipotecarios[d]=(D.pnl[m].hipotecarios[d]||0)+h.monto;});D.pnl[m].gastos_admin=rows.filter(h=>h.subtipo==='gasto_depto').reduce((s,h)=>s+h.monto,0);});
+  D.meses_all.forEach(m=>{
+    const[y,mo]=m.split('-').map(Number);
+    const rows=hist.filter(h=>h.planilla==='personal'&&h.año===y&&h.mes===mo);
+    D.pnl[m]={
+      sueldo:rows.filter(h=>efectSubtipo(h)==='sueldo').reduce((s,h)=>s+h.monto,0),
+      bono:rows.filter(h=>efectSubtipo(h)==='bono_otro').reduce((s,h)=>s+h.monto,0),
+      otros_ing:rows.filter(h=>h.tipo==='ingreso'&&!['sueldo','bono_otro'].includes(efectSubtipo(h))&&!(efectSubtipo(h)||'').startsWith('arriendo_')).reduce((s,h)=>s+h.monto,0),
+      arriendos:{},hipotecarios:{},gastos_admin:0
+    };
+    rows.filter(h=>h.tipo==='ingreso'&&(efectSubtipo(h)||'').startsWith('arriendo_')).forEach(h=>{
+      const st=efectSubtipo(h)||'';
+      const d=st.replace('arriendo_','');
+      if(d)D.pnl[m].arriendos[d]=(D.pnl[m].arriendos[d]||0)+h.monto;
+    });
+    rows.filter(h=>efectSubtipo(h)==='hipotecario').forEach(h=>{
+      const d=(h.item||'').replace('Hipotecario ','');
+      if(d)D.pnl[m].hipotecarios[d]=(D.pnl[m].hipotecarios[d]||0)+h.monto;
+    });
+    D.pnl[m].gastos_admin=rows.filter(h=>efectSubtipo(h)==='gasto_depto').reduce((s,h)=>s+h.monto,0);
+  });
   D.gastos_op={};D.extras={};
-  hist.filter(h=>h.planilla==='personal').forEach(h=>{const k=h.año+'-'+String(h.mes).padStart(2,'0');if(h.subtipo==='operacional'&&h.tipo==='gasto'){if(!D.gastos_op[k])D.gastos_op[k]={};const c=h.concepto||'Otros';D.gastos_op[k][c]=(D.gastos_op[k][c]||0)+h.monto;}if(h.subtipo==='extraordinario'&&h.tipo==='gasto'){if(!D.extras[k])D.extras[k]={};const c=h.item||'Otros';D.extras[k][c]=(D.extras[k][c]||0)+h.monto;}});
+  hist.filter(h=>h.planilla==='personal').forEach(h=>{
+    const k=h.año+'-'+String(h.mes).padStart(2,'0');
+    const st=efectSubtipo(h);
+    if(st==='operacional'&&h.tipo==='gasto'){if(!D.gastos_op[k])D.gastos_op[k]={};const c=h.concepto||'Otros';D.gastos_op[k][c]=(D.gastos_op[k][c]||0)+h.monto;}
+    if(h.tipo==='devolucion'){if(!D.gastos_op[k])D.gastos_op[k]={};const c=h.concepto||'Otros';D.gastos_op[k][c]=(D.gastos_op[k][c]||0)-h.monto;}
+    if(st==='extraordinario'&&h.tipo==='gasto'){if(!D.extras[k])D.extras[k]={};const c=h.item||'Otros';D.extras[k][c]=(D.extras[k][c]||0)+h.monto;}
+  });
   D.inversiones_ent={};
   const ENTS=['Fintual','Toesca','Racional','Security','Budacom','Capitaria'];
   // 'hipotecario' y 'gasto_depto' NUNCA entran aquí (son pagos de dividendo/GGCC de deptos,
   // van al P&L de Departamentos). Solo fondos de inversión: aporte_fondo / rescate_fondo.
-  hist.filter(h=>h.planilla==='personal'&&(h.subtipo==='aporte_fondo'||h.subtipo==='rescate_fondo'))
-  .forEach(h=>{const k=h.año+'-'+String(h.mes).padStart(2,'0');if(!D.inversiones_ent[k])D.inversiones_ent[k]={aportes:{},rescates:{}};const com=(h.comentario||'').toUpperCase();let ent='Otros';for(const e of ENTS){if(com.includes(e.toUpperCase())){ent=e;break;}}if(h.subtipo==='aporte_fondo')D.inversiones_ent[k].aportes[ent]=(D.inversiones_ent[k].aportes[ent]||0)+h.monto;else D.inversiones_ent[k].rescates[ent]=(D.inversiones_ent[k].rescates[ent]||0)+h.monto;});
+  hist.filter(h=>h.planilla==='personal'&&(efectSubtipo(h)==='aporte_fondo'||efectSubtipo(h)==='rescate_fondo'))
+  .forEach(h=>{const k=h.año+'-'+String(h.mes).padStart(2,'0');if(!D.inversiones_ent[k])D.inversiones_ent[k]={aportes:{},rescates:{}};const com=(h.comentario||'').toUpperCase();let ent='Otros';for(const e of ENTS){if(com.includes(e.toUpperCase())){ent=e;break;}}if(efectSubtipo(h)==='aporte_fondo')D.inversiones_ent[k].aportes[ent]=(D.inversiones_ent[k].aportes[ent]||0)+h.monto;else D.inversiones_ent[k].rescates[ent]=(D.inversiones_ent[k].rescates[ent]||0)+h.monto;});
   D.gastos_casa={};D.pnl_casa={};
-  D.meses_all_casa.forEach(m=>{const[y,mo]=m.split('-').map(Number);const rows=hist.filter(h=>h.planilla==='casa'&&h.año===y&&h.mes===mo);const sin={},ocio={};rows.forEach(h=>{const neto=h.tipo==='gasto'?h.monto:h.tipo==='devolucion'?-h.monto:0;if(neto<=0)return;const c=h.concepto||'Otros';if(OCIO.has(c))ocio[c]=(ocio[c]||0)+neto;else sin[c]=(sin[c]||0)+neto;});D.gastos_casa[m]={sin_ocio:sin,ocio:ocio};const tS=Object.values(sin).reduce((s,v)=>s+v,0),tO=Object.values(ocio).reduce((s,v)=>s+v,0);const apS=rows.filter(h=>h.tipo==='ingreso'&&h.pagado_por==='Seba').reduce((s,h)=>s+h.monto,0);const apB=rows.filter(h=>h.tipo==='ingreso'&&h.pagado_por==='Bea').reduce((s,h)=>s+h.monto,0);D.pnl_casa[m]={gastos_sin_ocio:sin,gastos_ocio:ocio,total_sin_ocio:tS,total_ocio:tO,total_gastos:tS+tO,seba:apS,bea:apB,total_aportes:apS+apB,saldo:apS+apB-(tS+tO)};});
+  D.meses_all_casa.forEach(m=>{const[y,mo]=m.split('-').map(Number);const rows=hist.filter(h=>h.planilla==='casa'&&h.año===y&&h.mes===mo);const sin={},ocio={};const accCasa={};rows.forEach(h=>{const neto=h.tipo==='gasto'?h.monto:h.tipo==='devolucion'?-h.monto:0;if(neto===0)return;const c=h.concepto||'Otros';accCasa[c]=(accCasa[c]||0)+neto;});Object.entries(accCasa).forEach(([c,v])=>{if(v<=0)return;if(OCIO.has(c))ocio[c]=(ocio[c]||0)+v;else sin[c]=(sin[c]||0)+v;});D.gastos_casa[m]={sin_ocio:sin,ocio:ocio};const tS=Object.values(sin).reduce((s,v)=>s+v,0),tO=Object.values(ocio).reduce((s,v)=>s+v,0);const apS=rows.filter(h=>h.tipo==='ingreso'&&h.pagado_por==='Seba').reduce((s,h)=>s+h.monto,0);const apB=rows.filter(h=>h.tipo==='ingreso'&&h.pagado_por==='Bea').reduce((s,h)=>s+h.monto,0);D.pnl_casa[m]={gastos_sin_ocio:sin,gastos_ocio:ocio,total_sin_ocio:tS,total_ocio:tO,total_gastos:tS+tO,seba:apS,bea:apB,total_aportes:apS+apB,saldo:apS+apB-(tS+tO)};});
   D.items_personal={};D.items_casa={};
-  hist.filter(h=>h.planilla==='personal'&&h.subtipo==='operacional'&&h.tipo==='gasto').forEach(h=>{const k=h.año+'-'+String(h.mes).padStart(2,'0');const c=h.concepto||'Otros',it=h.item||'Otros';if(!D.items_personal[k])D.items_personal[k]={};if(!D.items_personal[k][c])D.items_personal[k][c]={};D.items_personal[k][c][it]=(D.items_personal[k][c][it]||0)+h.monto;});
+  hist.filter(h=>h.planilla==='personal'&&((efectSubtipo(h)==='operacional'&&h.tipo==='gasto')||h.tipo==='devolucion')).forEach(h=>{const k=h.año+'-'+String(h.mes).padStart(2,'0');const c=h.concepto||'Otros',it=h.item||'Otros';if(!D.items_personal[k])D.items_personal[k]={};if(!D.items_personal[k][c])D.items_personal[k][c]={};const delta=h.tipo==='devolucion'?-h.monto:h.monto;D.items_personal[k][c][it]=(D.items_personal[k][c][it]||0)+delta;});
   hist.filter(h=>h.planilla==='casa'&&h.tipo==='gasto').forEach(h=>{const k=h.año+'-'+String(h.mes).padStart(2,'0');const c=h.concepto||'Otros',it=h.item||'Otros';if(!D.items_casa[k])D.items_casa[k]={};if(!D.items_casa[k][c])D.items_casa[k][c]={};D.items_casa[k][c][it]=(D.items_casa[k][c][it]||0)+h.monto;});
   D.reglas=[];
 }
@@ -908,7 +965,7 @@ async function bootApp(){
       D.hist.forEach(h=>{ h.reembolsado = esReembolsado(h.reembolsado) ? 1 : 0; });
       buildAggregatedData();
     setLoadProgress(95);
-    setTimeout(async ()=>{hideLoading();initSel();initHistSel();upd();filtH();await cargarPendientesSB();await cargarMediosPago();renderPendientes();actualizarCxP();},200);
+    setTimeout(async ()=>{hideLoading();initSel();initHistSel();upd();filtH();await cargarPendientesSB();await cargarMediosPago();renderPendientes();actualizarCxP();renderCargasLog();},200);
   }catch(e){
     hideLoading();
     document.body.innerHTML+='<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#0D0D0D;flex-direction:column;gap:12px"><div style="color:#F87171;font-size:14px">Error conectando con Supabase</div><div style="color:#505050;font-size:12px">'+e.message+'</div><button onclick="bootApp()" style="background:#60A5FA;color:#000;border:none;padding:8px 16px;border-radius:8px;cursor:pointer">Reintentar</button></div>';
@@ -2594,6 +2651,7 @@ function procesarTexto() {
     }
     window._batchMovsPending = movs;
     window._batchPlanDef = planDef;
+    window._batchFuente = {fuente:'texto', banco:banco};
     $('txt-cartola').value='';
     abrirModalBatch();
   }, 300);
@@ -2662,6 +2720,7 @@ Si la imagen no contiene una tabla de movimientos bancarios reconocible, respond
         return;
       }
       window._batchPlanDef = planDef;
+      window._batchFuente = {fuente:'imagen', banco:'imagen'};
       abrirModalBatch();
     } catch(e) {
       console.error('Error procesando imagen:', e);
@@ -2732,6 +2791,7 @@ Si el PDF no contiene una tabla de movimientos bancarios reconocible, responde c
         return;
       }
       window._batchPlanDef = planDef;
+      window._batchFuente = {fuente:'pdf', banco:'pdf'};
       abrirModalBatch();
     } catch(e) {
       console.error('Error procesando PDF:', e);
@@ -2770,6 +2830,11 @@ function confirmarBatch() {
     }
     pendientes.push(p);
   }
+  window._batchCargaMeta = {
+    fuente: (window._batchFuente||{}).fuente || 'texto',
+    banco: (window._batchFuente||{}).banco || 'auto',
+    planilla: plan
+  };
   window._batchMovsPending = [];
   renderPendientes();
 }
@@ -3106,7 +3171,55 @@ async function confirmarTodos() {
   filtH();
   actualizarCxP();
   const n = aConfirmar.length;
+  registrarCarga(window._batchCargaMeta || {}, aConfirmar);
+  window._batchCargaMeta = null;
   alert(`✓ ${n} movimiento${n>1?'s':''} guardado${n>1?'s':''} en Supabase.`);
+}
+// ── REGISTRO DE CARGAS ───────────────────────────────────────────────────────
+const BANCO_LABELS = {
+  'santander-cc':'Santander CC','santander-tc':'Santander TC','bci':'BCI CC',
+  'imagen':'Imagen','pdf':'PDF','manual':'Manual','auto':'Auto'
+};
+function getCargasLog(){
+  try{return JSON.parse(localStorage.getItem('gastos_cargas_log')||'[]');}catch{return [];}
+}
+function registrarCarga(meta, movsConfirmados){
+  const fechas=movsConfirmados.map(m=>m.fecha).filter(Boolean).sort();
+  if(!fechas.length) return;
+  const desde=fechas[0], hasta=fechas[fechas.length-1];
+  const fmtMes=f=>mlbl(f.slice(0,7));
+  const periodo=fmtMes(desde)===fmtMes(hasta)?fmtMes(desde):fmtMes(desde)+' – '+fmtMes(hasta);
+  const bancoLabel=BANCO_LABELS[meta.banco||'auto']||meta.banco||'?';
+  const planLabel=meta.planilla==='casa'?'Casa':'Personal';
+  const label=`${bancoLabel} · ${periodo} · ${movsConfirmados.length} mov. · ${planLabel}`;
+  const entrada={id:Date.now(),fecha_carga:new Date().toISOString(),label,banco:meta.banco,
+    planilla:meta.planilla,fuente:meta.fuente,n:movsConfirmados.length,desde,hasta};
+  const log=getCargasLog();
+  log.unshift(entrada);
+  if(log.length>60) log.pop();
+  localStorage.setItem('gastos_cargas_log',JSON.stringify(log));
+  renderCargasLog();
+}
+function borrarCargasLog(){
+  if(!confirm('¿Borrar el registro de cargas?')) return;
+  localStorage.removeItem('gastos_cargas_log');
+  renderCargasLog();
+}
+function renderCargasLog(){
+  const el=$('cargas-log'); if(!el) return;
+  const log=getCargasLog();
+  if(!log.length){
+    el.innerHTML='<div style="color:var(--text3);padding:4px 0">Sin cargas registradas.</div>';
+    return;
+  }
+  el.innerHTML=log.map(c=>{
+    const d=new Date(c.fecha_carga);
+    const fechaCarga=d.toLocaleDateString('es-CL')+' '+d.toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border)">
+      <span style="color:var(--text)">${c.label}</span>
+      <span style="color:var(--text3);white-space:nowrap;margin-left:12px">${fechaCarga}</span>
+    </div>`;
+  }).join('');
 }
 function openGest() { $('gest-modal').classList.add('show'); renderGest(); }
 function closeGest() { $('gest-modal').classList.remove('show'); }
