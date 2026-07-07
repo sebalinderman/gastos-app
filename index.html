@@ -541,6 +541,15 @@ Ejemplos:
 
     <!-- Imagen -->
     <div id="src-imagen" style="display:none">
+      <select id="img-banco" style="margin-bottom:10px;width:100%">
+        <option value="santander-cc">Santander CC</option>
+        <option value="santander-tc">Santander TC</option>
+        <option value="santander-cc-familia">Santander CC Familia</option>
+        <option value="bci-cc">BCI CC</option>
+        <option value="bci-tc">BCI TC</option>
+        <option value="splitwise">Splitwise</option>
+        <option value="otros">Otros</option>
+      </select>
       <div class="upload-zone" onclick="$('inp-img').click()">
         <input type="file" id="inp-img" accept="image/*" multiple onchange="procesarImagen(this)">
         <div style="font-size:2rem;margin-bottom:8px">📷</div>
@@ -554,6 +563,15 @@ Ejemplos:
 
     <!-- PDF -->
     <div id="src-pdf" style="display:none">
+      <select id="pdf-banco" style="margin-bottom:10px;width:100%">
+        <option value="santander-cc">Santander CC</option>
+        <option value="santander-tc">Santander TC</option>
+        <option value="santander-cc-familia">Santander CC Familia</option>
+        <option value="bci-cc">BCI CC</option>
+        <option value="bci-tc">BCI TC</option>
+        <option value="splitwise">Splitwise</option>
+        <option value="otros">Otros</option>
+      </select>
       <div class="upload-zone" onclick="$('inp-pdf').click()">
         <input type="file" id="inp-pdf" accept=".pdf" onchange="procesarPDF(this)">
         <div style="font-size:2rem;margin-bottom:8px">📄</div>
@@ -2321,7 +2339,7 @@ function parsearCartola(texto, banco) {
   // ── BCI CC: Fecha|Desc|Serie|Monto$|Saldo — soporta descripciones multi-línea ──
   // Formato: DD-MM-YYYY | descripcion (puede ser multi-línea) | serie (12 dígitos) | monto | saldo
   // El signo se determina comparando saldo actual vs saldo previo (datos en orden descendente)
-  const esBCI = banco === 'bci' || lineas.filter(l => /^\d{2}-\d{2}-\d{4}\s/i.test(l.trim())).length >= 2;
+  const esBCI = banco === 'bci' || banco === 'bci-cc' || banco === 'bci-tc' || lineas.filter(l => /^\d{2}-\d{2}-\d{4}\s/i.test(l.trim())).length >= 2;
   if(esBCI) {
     // ── Detectar formato columnas separadas (PDF BCI: descripcs arriba, $montos abajo) ──
     const bciDateLines = lineas.filter(l => /^\d{2}-\d{2}-\d{4}\s+\S/.test(l.trim()));
@@ -2756,7 +2774,7 @@ Si la imagen no contiene una tabla de movimientos bancarios reconocible, respond
         return;
       }
       window._batchPlanDef = planDef;
-      window._batchFuente = {fuente:'imagen', banco:'imagen'};
+      window._batchFuente = {fuente:'imagen', banco:$('img-banco')?.value||'otro'};
       abrirModalBatch();
     } catch(e) {
       console.error('Error procesando imagen:', e);
@@ -2828,7 +2846,7 @@ Si el PDF no contiene una tabla de movimientos bancarios reconocible, responde c
         return;
       }
       window._batchPlanDef = planDef;
-      window._batchFuente = {fuente:'pdf', banco:'pdf'};
+      window._batchFuente = {fuente:'pdf', banco:$('pdf-banco')?.value||'otro'};
       abrirModalBatch();
     } catch(e) {
       console.error('Error procesando PDF:', e);
@@ -3214,7 +3232,11 @@ async function confirmarTodos() {
 }
 // ── REGISTRO DE CARGAS ───────────────────────────────────────────────────────
 const BANCO_LABELS = {
-  'santander-cc':'Santander CC','santander-tc':'Santander TC','bci':'BCI CC',
+  'santander-cc':'Santander CC','santander-tc':'Santander TC',
+  'santander-cc-familia':'Santander CC Familia',
+  'bci-cc':'BCI CC','bci-tc':'BCI TC',
+  'splitwise':'Splitwise','otros':'Otros',
+  'bci':'BCI CC',  // compatibilidad hacia atrás
   'imagen':'Imagen','pdf':'PDF','manual':'Manual','auto':'Auto'
 };
 function getCargasLog(){
@@ -3228,7 +3250,10 @@ function registrarCarga(meta, movsConfirmados){
   const periodo=fmtMes(desde)===fmtMes(hasta)?fmtMes(desde):fmtMes(desde)+' – '+fmtMes(hasta);
   const bancoLabel=BANCO_LABELS[meta.banco||'auto']||meta.banco||'?';
   const planLabel=meta.planilla==='casa'?'Casa':'Personal';
-  const label=`${bancoLabel} · ${periodo} · ${movsConfirmados.length} mov. · ${planLabel}`;
+  // Si el banco ya incluye el tipo (CC/TC), no repetir la fuente
+  const fuenteLabel=['imagen','pdf','texto'].includes(meta.fuente)&&!bancoLabel.match(/CC|TC|Otro/)
+    ? ` (${meta.fuente})` : '';
+  const label=`${bancoLabel}${fuenteLabel} · ${periodo} · ${movsConfirmados.length} mov. · ${planLabel}`;
   const entrada={id:Date.now(),fecha_carga:new Date().toISOString(),label,banco:meta.banco,
     planilla:meta.planilla,fuente:meta.fuente,n:movsConfirmados.length,desde,hasta};
   const log=getCargasLog();
