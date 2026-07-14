@@ -66,7 +66,8 @@ select.ctl{background:var(--bg3);border:1px solid var(--border2);border-radius:7
 .leg-label{font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .chart-area{padding:16px;min-height:252px}
 .chart-wrap{position:relative;height:220px}
-.deptos-grid{display:grid;grid-template-columns:repeat(4,minmax(200px,1fr));gap:10px;margin-bottom:14px;overflow-x:auto;padding-bottom:4px}
+.deptos-grid{display:flex;gap:10px;margin-bottom:14px;overflow-x:auto;padding-bottom:8px;align-items:stretch}
+.dep-card{flex:1 1 0;min-width:210px}
 .dep-card{background:var(--bg3);border-radius:10px;padding:13px;border:1px solid var(--border)}
 .dep-name{font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:10px}
 .dep-row{display:flex;justify-content:space-between;font-size:12px;padding:3px 0}
@@ -125,7 +126,7 @@ tbody tr:hover td:first-child{background:var(--bg3)}
   .cards{grid-template-columns:1fr 1fr}
   .chart-layout{grid-template-columns:1fr}
   .legend-panel{border-right:none;border-bottom:1px solid var(--border);max-height:100px;display:flex;flex-wrap:wrap;gap:3px;padding:8px}
-  .deptos-grid{grid-template-columns:1fr 1fr}
+  .dep-card{min-width:180px}
   .main{padding:12px 14px}
   .topbar{padding:0 14px}
 }
@@ -231,7 +232,7 @@ tr:hover .move-btns { opacity:1; }
 <body>
 <script>if(localStorage.getItem('gastos_tema')==='light')document.body.classList.add('light');</script>
 <div class="topbar">
-  <div class="logo">gastos<em>_</em>app</div>
+  <div class="logo" title="v20260714-1549">gastos<em>_</em>app</div>
   <div class="tabs-top">
     <button class="ttab on" onclick="swP('personal',this)">Personal</button>
     <button class="ttab" onclick="swP('casa',this)">Casa</button>
