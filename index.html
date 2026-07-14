@@ -84,7 +84,7 @@ select.ctl{background:var(--bg3);border:1px solid var(--border2);border-radius:7
 .pnl-controls label{font-size:12px;color:var(--text2)}
 .tbl-wrap{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:12px}
-thead th{font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--text3);padding:8px 14px;border-bottom:1px solid var(--border);text-align:right;font-weight:400;white-space:nowrap;background:var(--bg2);position:sticky;top:52px;z-index:2}
+thead th{font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--text3);padding:8px 14px;border-bottom:1px solid var(--border);text-align:right;font-weight:400;white-space:nowrap;background:var(--bg2);position:sticky;top:0;z-index:2}
 thead th:first-child{text-align:left;position:sticky;left:0;z-index:3;background:var(--bg2)}
 tbody td{padding:6px 14px;border-bottom:1px solid var(--border);text-align:right;color:var(--text2);font-family:var(--mono);white-space:nowrap}
 tbody td:first-child{text-align:left;color:var(--text);font-family:var(--font);position:sticky;left:0;background:var(--bg2);min-width:160px}
@@ -232,7 +232,7 @@ tr:hover .move-btns { opacity:1; }
 <body>
 <script>if(localStorage.getItem('gastos_tema')==='light')document.body.classList.add('light');</script>
 <div class="topbar">
-  <div class="logo" title="v20260714-1549">gastos<em>_</em>app</div>
+  <div class="logo" title="v20260714-2220">gastos<em>_</em>app</div>
   <div class="tabs-top">
     <button class="ttab on" onclick="swP('personal',this)">Personal</button>
     <button class="ttab" onclick="swP('casa',this)">Casa</button>
@@ -916,10 +916,11 @@ function efectSubtipo(h) {
     if(conc === 'Sueldo' || item === 'Sueldo') return 'sueldo';
     if(conc === 'Bono / Otros' || item === 'Bono / Otros') return 'bono_otro';
     if(conc.startsWith('Arriendo ')) return 'arriendo_' + conc.replace('Arriendo ', '');
-    // Fallback por comentario: sueldo de Toesca (empleador) reconocible por texto.
-    // Solo aplica a ingresos grandes recurrentes para no marcar transfers chicas.
+    // Fallback por comentario: sueldo del empleador (Toesca) reconocible por texto.
+    // 'TOESCA' + 'ADMIN' cubre variantes truncadas como 'ADMINI'/'ADMINIST'.
     const com = (h.comentario || '').toUpperCase();
-    if(/TOESCA S\s?A\s+ADMINIST|TOESCA.*ADMINIST|SUELDO|REMUNERAC|NOMINA/.test(com)) return 'sueldo';
+    if(/SUELDO|REMUNERAC|NOMINA/.test(com)) return 'sueldo';
+    if(com.includes('TOESCA') && com.includes('ADMIN')) return 'sueldo';
     return null;
   }
   if(h.tipo === 'gasto') {
@@ -1300,11 +1301,26 @@ function renderPnl(){
   }
   function sec(lbl){h+=`<tr class="tr-s"><td colspan="${M.length+2}">${lbl}</td></tr>`;}
 
-  // Ingresos
+  // ── Ingresos ──
+  // Función dedicada: las filas SIEMPRE se dibujan, tengan datos o no.
+  // Cada celda es clickeable: con dato → editar; vacía → agregar.
+  function rowIng(lbl, subtipoKey, vals){
+    const av = avg(vals.map(v => v || null));
+    h += '<tr class="tr-sub">';
+    h += '<td>' + lbl + '</td>';
+    for(let i = 0; i < M.length; i++){
+      const v = vals[i] || 0;
+      const m = M[i];
+      h += '<td class="pos clickable" onclick="openIngresoEdit(\'' + subtipoKey + '\',\'' + m + '\')" title="' + (v ? 'Click para ver/editar' : 'Click para agregar') + '">';
+      h += v ? fclp(v) : '<span style="color:var(--text3);font-size:10px">+ agregar</span>';
+      h += '</td>';
+    }
+    h += '<td class="neu" style="font-size:11px">' + (av ? fclp(av) : '—') + '</td></tr>';
+  }
   sec('Ingresos');
-  row('Sueldo',M.map(m=>D.pnl[m]?.sueldo||null),'pos',true,false,null,null,'sueldo');
-  row('Bono / Otros',M.map(m=>D.pnl[m]?.bono||null),'pos',true,false,null,null,'bono_otro');
-  {const anyO=M.some(m=>(D.pnl[m]?.otros_ing||0)>0);if(anyO)row('Otros ingresos',M.map(m=>D.pnl[m]?.otros_ing||null),'pos',true,false,null,null,'otros_ing');}
+  rowIng('Sueldo',        'sueldo',    M.map(m => D.pnl[m]?.sueldo    || 0));
+  rowIng('Bono / Otros',  'bono_otro', M.map(m => D.pnl[m]?.bono      || 0));
+  rowIng('Otros ingresos','otros_ing', M.map(m => D.pnl[m]?.otros_ing || 0));
   row('Total',M.map(m=>((D.pnl[m]?.sueldo||0)+(D.pnl[m]?.bono||0)+(D.pnl[m]?.otros_ing||0))||null),'pos',false,true,null,null);
 
   // Gastos op — orden personalizado, Otros siempre al final, sin duplicados
@@ -3523,6 +3539,19 @@ function filtH() {
       if(activeFilter.planilla !== null && activeFilter.planilla !== undefined && activeFilter.planilla !== '') {
         if(h.planilla !== activeFilter.planilla) return false;
       }
+      // Filtro por subtipo efectivo (ingresos del P&L)
+      if(activeFilter.subtipoEfectivo) {
+        const stf = activeFilter.subtipoEfectivo;
+        const stActual = efectSubtipo(h);
+        if(stf === 'otros_ing') {
+          // "otros_ing" = ingreso personal que NO es sueldo/bono/arriendo
+          if(h.tipo !== 'ingreso') return false;
+          if(['sueldo','bono_otro'].includes(stActual)) return false;
+          if((stActual||'').startsWith('arriendo_')) return false;
+        } else {
+          if(stActual !== stf) return false;
+        }
+      }
       // Filtro por entidad (inversiones)
       if(activeFilter.entidad) {
         const com = (h.comentario||'').toUpperCase();
@@ -3594,23 +3623,34 @@ const _ingSubtipos={sueldo:'sueldo',bono_otro:'bono_otro',arriendo_2201:'arriend
 
 function openIngresoEdit(subtipo,mes){
   const[y,mo]=mes.split('-').map(Number);
-  // Buscar registro existente
-  let existing=null;
-  if(subtipo.startsWith('arriendo_')){
-    const depto=subtipo.replace('arriendo_','');
-    existing=D.hist.find(h=>h.planilla==='personal'&&h.tipo==='ingreso'
-      &&(h.subtipo||'').startsWith('arriendo_')
-      &&(h.concepto||'').includes(depto)&&h.año===y&&h.mes===mo);
-  } else if(subtipo==='otros_ing') {
-    // Otros ingresos puede haber varios en un mes; no auto-editar, siempre crear nuevo
-    existing=null;
-  } else {
-    existing=D.hist.find(h=>h.planilla==='personal'&&h.tipo==='ingreso'
-      &&efectSubtipo(h)===subtipo&&h.año===y&&h.mes===mo);
+  // Buscar TODOS los registros de ese subtipo en ese mes
+  const matches = D.hist.filter(h=>{
+    if(h.planilla!=='personal'||h.tipo!=='ingreso') return false;
+    if(h.año!==y||h.mes!==mo) return false;
+    const st = efectSubtipo(h);
+    if(subtipo==='otros_ing'){
+      // otros_ing = ingreso que no es sueldo/bono/arriendo
+      if(['sueldo','bono_otro'].includes(st)) return false;
+      if((st||'').startsWith('arriendo_')) return false;
+      return true;
+    }
+    if(subtipo.startsWith('arriendo_')){
+      const depto=subtipo.replace('arriendo_','');
+      return (st||'').startsWith('arriendo_') && (h.concepto||'').includes(depto);
+    }
+    return st===subtipo;
+  });
+  // 1 registro → editar directo
+  if(matches.length===1){ openMod(matches[0].id); return; }
+  // Varios → filtrar historial para que el usuario elija cuál editar
+  if(matches.length>1){
+    applyFilter({
+      subtipoEfectivo: subtipo, mes: mes, planilla: 'personal',
+      label: (_ingLabels[subtipo]||subtipo)+' · '+mlbl(mes)+' ('+matches.length+' movs)'
+    });
+    return;
   }
-  // Si ya existe, abrimos el modal de edición estándar
-  if(existing){openMod(existing.id);return;}
-  // Abrir modal para crear nuevo
+  // Ninguno → crear nuevo
   _ingMeta={subtipo,mes,concepto:_ingConceptos[subtipo]||'Ingreso',pagadoPor:null};
   $('ing-title').textContent='Agregar '+(_ingLabels[subtipo]||subtipo)+' — '+mlbl(mes);
   $('ing-monto').value='';
