@@ -232,7 +232,7 @@ tr:hover .move-btns { opacity:1; }
 <body>
 <script>if(localStorage.getItem('gastos_tema')==='light')document.body.classList.add('light');</script>
 <div class="topbar">
-  <div class="logo" title="v20260714-2255">gastos<em>_</em>app</div>
+  <div class="logo" title="v20260715-1344">gastos<em>_</em>app</div>
   <div class="tabs-top">
     <button class="ttab on" onclick="swP('personal',this)">Personal</button>
     <button class="ttab" onclick="swP('casa',this)">Casa</button>
@@ -911,6 +911,11 @@ function efectSubtipo(h) {
     if(h.subtipo === 'aporte_fondo' || h.subtipo === 'rescate_fondo') return h.subtipo;
     return 'aporte_fondo';
   }
+  // Gastos: SIEMPRE derivar del concepto. No hay ambigüedad posible y así
+  // los datos legacy con subtipo desincronizado se corrigen solos al leer.
+  if(h.tipo === 'gasto') {
+    return conc === 'Extraordinarios' ? 'extraordinario' : 'operacional';
+  }
   if(h.subtipo) return h.subtipo;
   if(h.tipo === 'ingreso') {
     if(conc === 'Sueldo' || item === 'Sueldo') return 'sueldo';
@@ -922,10 +927,6 @@ function efectSubtipo(h) {
     if(/SUELDO|REMUNERAC|NOMINA/.test(com)) return 'sueldo';
     if(com.includes('TOESCA') && com.includes('ADMIN')) return 'sueldo';
     return null;
-  }
-  if(h.tipo === 'gasto') {
-    if(conc === 'Extraordinarios') return 'extraordinario';
-    return 'operacional';
   }
   return null;
 }
@@ -1522,7 +1523,10 @@ function renderGop(){
   const M=getMesesToShow(D.meses_all||Object.keys(D.pm).sort());
   const cats=new Set();
   M.forEach(m=>Object.keys(D.gastos_op[m]||{}).forEach(c=>cats.add(c)));
-  const catArr=[...cats].sort();
+  // 'Extraordinarios' se agrega aparte como dataset propio (stack 'e').
+  // Excluirlo de catArr evita dos datasets/leyendas con la misma etiqueta,
+  // que rompía el toggle (datasets.find devuelve solo el primero).
+  const catArr=[...cats].filter(c=>c!=='Extraordinarios').sort();
   catArr.forEach(c=>{if(CV['p_'+c]===undefined)CV['p_'+c]=true;});
   if(CV['p_Extraordinarios']===undefined)CV['p_Extraordinarios']=true;
 
