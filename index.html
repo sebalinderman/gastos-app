@@ -232,7 +232,7 @@ tr:hover .move-btns { opacity:1; }
 <body>
 <script>if(localStorage.getItem('gastos_tema')==='light')document.body.classList.add('light');</script>
 <div class="topbar">
-  <div class="logo" title="v20260714-2220">gastos<em>_</em>app</div>
+  <div class="logo" title="v20260714-2255">gastos<em>_</em>app</div>
   <div class="tabs-top">
     <button class="ttab on" onclick="swP('personal',this)">Personal</button>
     <button class="ttab" onclick="swP('casa',this)">Casa</button>
@@ -1640,6 +1640,7 @@ function renderExtr(){
   const conExtr=totales.filter(v=>v>0);
   const avg=conExtr.length?conExtr.reduce((s,v)=>s+v,0)/conExtr.length:0;
   $('meta-extr').textContent=conExtr.length+' meses con extraordinarios. Promedio: '+fk(avg);
+  addExtrClick('c-extr', M);
 }
 function renderDep(){
   const p=D.pnl[mes]||{};
@@ -1910,6 +1911,9 @@ function renderAportesCasa(){
   addChartClickMes('c-aportes-casa', M, 'casa');
 }
 function applyFilter(f) {
+  // Limpiar filtros manuales: si quedan puestos (ej. tipo=Gasto, mes=Feb),
+  // se intersectan con el filtro del gráfico y dan 0 resultados.
+  ['hq','ht','hp','hm','hc'].forEach(id=>{ const el=$(id); if(el) el.value=''; });
   activeFilter = f;
   // Mostrar banner
   const banner = $('filter-banner');
@@ -1977,28 +1981,42 @@ function addInvClick(chartId, mesesArr) {
     // O filtrar por concepto='Inversiones' + mes
     if(entidad === 'Rescates') {
       applyFilter({
-        concepto: 'Inversiones',
+        subtipoEfectivo: 'rescate_fondo',
         mes: e.ctrlKey ? null : mesLabel,
         planilla: 'personal',
         label: 'Rescates' + (e.ctrlKey ? '' : ' · ' + mlbl(mesLabel))
       });
     } else {
-      // Filtrar por entidad usando comentario
-      activeFilter = {
-        concepto: 'Inversiones',
+      applyFilter({
+        subtipoEfectivo: 'aporte_fondo',
         mes: e.ctrlKey ? null : mesLabel,
         planilla: 'personal',
         entidad: entidad,
         label: entidad + (e.ctrlKey ? '' : ' · ' + mlbl(mesLabel))
-      };
-      $('filter-banner').classList.add('show');
-      $('filter-desc').textContent = 'Filtrando: ' + activeFilter.label;
-      if(!$('sec-hist').classList.contains('open')) {
-        $('sec-hist').classList.add('open');
-        $('tog-hist') && ($('tog-hist').textContent='▼');
-      }
-      filtH();
+      });
     }
+  };
+}
+function addExtrClick(chartId, mesesArr) {
+  const canvas = $(chartId);
+  if(!canvas) return;
+  canvas.classList.add('chart-clickable');
+  canvas.title = 'Click para ver los movimientos de ese extraordinario';
+  canvas.onclick = (e) => {
+    const ch = CH.extr;
+    if(!ch) return;
+    const pts = ch.getElementsAtEventForMode(e, e.ctrlKey?'dataset':'nearest', {intersect:!e.ctrlKey}, true);
+    if(!pts.length) return;
+    const item = ch.data.datasets[pts[0].datasetIndex].label;
+    const mesLabel = mesesArr[pts[0].index];
+    if(!item || !mesLabel) return;
+    applyFilter({
+      subtipoEfectivo: 'extraordinario',
+      item: item,
+      mes: e.ctrlKey ? null : mesLabel,
+      planilla: 'personal',
+      label: 'Extraordinario: ' + item + (e.ctrlKey ? '' : ' · ' + mlbl(mesLabel))
+    });
   };
 }
 function addDepClick(chartId, mesesArr) {
@@ -2015,20 +2033,13 @@ function addDepClick(chartId, mesesArr) {
     const mesLabel = _dm[pts[0].index];
     if(!mesLabel) return;
     // Filtrar por arriendos + hipotecarios de ese mes
-    activeFilter = {
+    applyFilter({
       concepto: null,
       mes: mesLabel,
       planilla: 'personal',
       tiposIncluir: ['ingreso','inversion'],
       label: 'Departamentos · ' + mlbl(mesLabel)
-    };
-    $('filter-banner').classList.add('show');
-    $('filter-desc').textContent = 'Filtrando: ' + activeFilter.label;
-    if(!$('sec-hist').classList.contains('open')) {
-      $('sec-hist').classList.add('open');
-      $('tog-hist') && ($('tog-hist').textContent='▼');
-    }
-    filtH();
+    });
   };
 }
 function makePnlClickable(tblId, pl) {
@@ -3552,11 +3563,20 @@ function filtH() {
           if(stActual !== stf) return false;
         }
       }
+      // Filtro por ítem (extraordinarios). D.extras agrupa por item||'Otros'
+      if(activeFilter.item) {
+        if((h.item||'Otros') !== activeFilter.item) return false;
+      }
       // Filtro por entidad (inversiones)
       if(activeFilter.entidad) {
         const com = (h.comentario||'').toUpperCase();
-        const ent = activeFilter.entidad.toUpperCase();
-        if(!com.includes(ent)) return false;
+        const ENTS_CONOCIDAS = ['FINTUAL','TOESCA','RACIONAL','SECURITY','BUDACOM','CAPITARIA'];
+        if(activeFilter.entidad === 'Otros') {
+          // 'Otros' = el bucket de lo que NO coincide con ninguna entidad conocida
+          if(ENTS_CONOCIDAS.some(en=>com.includes(en))) return false;
+        } else {
+          if(!com.includes(activeFilter.entidad.toUpperCase())) return false;
+        }
       }
       // Filtro por tipos (deptos)
       if(activeFilter.tiposIncluir) {
