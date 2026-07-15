@@ -67,8 +67,12 @@ select.ctl{background:var(--bg3);border:1px solid var(--border2);border-radius:7
 .chart-area{padding:16px;min-height:252px}
 .chart-wrap{position:relative;height:220px}
 .deptos-grid{display:flex;gap:10px;margin-bottom:14px;overflow-x:auto;padding-bottom:8px;align-items:stretch}
-.dep-card{flex:1 1 0;min-width:210px}
+.dep-card{flex:1 1 auto}
+.dep-card table td,.dep-card table th{white-space:nowrap}
 .dep-card{background:var(--bg3);border-radius:10px;padding:13px;border:1px solid var(--border)}
+.heat-btn{background:none;border:none;cursor:pointer;font-size:10px;color:var(--text3);padding:0;margin-left:7px;opacity:.3;transition:opacity .15s,color .15s;vertical-align:middle;line-height:1}
+.heat-btn:hover{opacity:.9}
+.heat-btn.on{opacity:1;color:var(--blue)}
 .dep-name{font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:10px}
 .dep-row{display:flex;justify-content:space-between;font-size:12px;padding:3px 0}
 .dep-row .lbl{color:var(--text2)}
@@ -126,7 +130,7 @@ tbody tr:hover td:first-child{background:var(--bg3)}
   .cards{grid-template-columns:1fr 1fr}
   .chart-layout{grid-template-columns:1fr}
   .legend-panel{border-right:none;border-bottom:1px solid var(--border);max-height:100px;display:flex;flex-wrap:wrap;gap:3px;padding:8px}
-  .dep-card{min-width:180px}
+  .dep-card{flex:1 1 auto}
   .main{padding:12px 14px}
   .topbar{padding:0 14px}
 }
@@ -232,7 +236,7 @@ tr:hover .move-btns { opacity:1; }
 <body>
 <script>if(localStorage.getItem('gastos_tema')==='light')document.body.classList.add('light');</script>
 <div class="topbar">
-  <div class="logo" title="v20260715-1344">gastos<em>_</em>app</div>
+  <div class="logo" title="v20260715-1429">gastos<em>_</em>app</div>
   <div class="tabs-top">
     <button class="ttab on" onclick="swP('personal',this)">Personal</button>
     <button class="ttab" onclick="swP('casa',this)">Casa</button>
@@ -245,9 +249,9 @@ tr:hover .move-btns { opacity:1; }
     <button class="ctl" id="btn-tema" onclick="toggleTema()" title="Modo claro/oscuro" style="cursor:pointer;font-size:14px;padding:4px 9px">🌙</button>
     <button class="ctl" onclick="openGest()" style="cursor:pointer" title="Gestionar conceptos e ítems">⚙ Conceptos</button>
     <select class="ctl" id="sel-periodo" onchange="updPeriodo()" title="Rango de meses a mostrar en gráficos y P&L">
-      <option value="6">6 meses</option>
+      <option value="6" selected>6 meses</option>
       <option value="12">12 meses</option>
-      <option value="18" selected>18 meses</option>
+      <option value="18">18 meses</option>
       <option value="999">Todos</option>
     </select>
     <select class="ctl" id="sel-mes" onchange="upd()"></select>
@@ -329,9 +333,9 @@ tr:hover .move-btns { opacity:1; }
       <div class="pnl-controls">
         <label>Período:</label>
         <select class="ctl" id="pnl-n" onchange="syncPeriodo('personal')">
-          <option value="6">Últimos 6</option>
+          <option value="6" selected>Últimos 6</option>
           <option value="12">Últimos 12</option>
-          <option value="18" selected>Últimos 18</option>
+          <option value="18">Últimos 18</option>
           <option value="999">Todos</option>
         </select>
         <label style="margin-left:12px">Promedio:</label>
@@ -421,9 +425,9 @@ tr:hover .move-btns { opacity:1; }
       <div class="pnl-controls">
         <label>Período:</label>
         <select class="ctl" id="pnl-n-casa" onchange="syncPeriodo('casa')">
-          <option value="6">Últimos 6</option>
+          <option value="6" selected>Últimos 6</option>
           <option value="12">Últimos 12</option>
-          <option value="18" selected>Últimos 18</option>
+          <option value="18">Últimos 18</option>
           <option value="999">Todos</option>
         </select>
         <label style="margin-left:12px">Promedio:</label>
@@ -1071,6 +1075,29 @@ async function guardarMedioPago(nombre) {
 function esReembolsado(v) { return v===1||v==='1'||v===true; }
 let activeFilter=null;
 let expandedConcepts={};
+// ── HEATMAP por fila ──────────────────────────────────────────
+// Escala de color dentro de cada fila (compara meses entre sí para ese concepto).
+let heatRows={};
+function togHeat(key,isCasa){
+  heatRows[key]=!heatRows[key];
+  if(isCasa) renderPnlCasa(); else renderPnl();
+}
+// Devuelve el style de fondo para una celda según su valor dentro de la fila.
+// cls: 'pos' (verde) | 'neg' (rojo) | otro (azul neutro)
+function heatBg(v,vals,cls){
+  if(!v) return '';
+  const nums=vals.filter(x=>x!=null&&x!==0).map(Math.abs);
+  if(nums.length<2) return '';
+  const mn=Math.min(...nums), mx=Math.max(...nums);
+  const t = mx>mn ? (Math.abs(v)-mn)/(mx-mn) : 0.5;
+  const a = (0.07 + t*0.43).toFixed(3);
+  const rgb = cls==='pos' ? '34,197,94' : cls==='neg' ? '239,68,68' : '96,165,250';
+  return 'background:rgba('+rgb+','+a+') !important;';
+}
+function heatBtn(key,isCasa){
+  const on=!!heatRows[key];
+  return '<button class="heat-btn'+(on?' on':'')+'" onclick="event.stopPropagation();togHeat(\''+key+'\','+(isCasa?'true':'false')+')" title="'+(on?'Quitar':'Ver')+' escala de color por mes">▦</button>';
+}
 let pnlOrden={'personal':null,'casa':null};
 let itemsOrden={};
 let pendientes=[], gestPlanilla='personal', gestConcepto=null, gestItem=null;
@@ -1192,7 +1219,7 @@ function addMoveButtons(tblId){
 
 // ── getMesesToShow ─────────────────────────────────────────────────
 function getMesesToShow(allM){
-  const n=parseInt($('sel-periodo')?.value||'18');
+  const n=parseInt($('sel-periodo')?.value||'6');
   return n>=999?allM:allM.slice(-n);
 }
 
@@ -1236,7 +1263,7 @@ function crd(acc,lbl,val,vcls,sub,dlt){
 
 // ── P&L PERSONAL ──────────────────────────────────────────────────
 function renderPnl(){
-  const n=parseInt($('pnl-n').value)||18;
+  const n=parseInt($('pnl-n').value)||6;
   const allM=D.meses_all||[];
   const M=n>=999?allM:allM.slice(-n);
   const avgSel=$('pnl-avg')?.value||'all';
@@ -1257,6 +1284,8 @@ function renderPnl(){
   // concepto !== null → tiene botones de mover
   function row(lbl,vals,cls,isSub,isBold,concepto,pl,editSubtipo){
     const av=avg(vals);
+    const _hk='p_'+lbl;
+    const _hOn=!!heatRows[_hk];
     const hasItems=concepto&&pl&&(pl==='personal'?D.items_personal:D.items_casa)&&
       M.some(m=>(pl==='personal'?D.items_personal:D.items_casa)[m]?.[concepto]);
     const expanded=expandedConcepts[(pl||'')+'_'+(concepto||'')];
@@ -1280,9 +1309,10 @@ function renderPnl(){
       const click=concepto&&m&&!isBold;
       const cc=concepto||'';
       const pp=pl||'';
-      h+=`<td class="${cls}${click?' clickable':''}"${click?` data-cc="${cc}" data-mm="${m}" data-pp="${pp}" onclick="cellClick(this)"`:''}>${fclp(v)}</td>`;
+      const _bg=_hOn?heatBg(v,vals,cls):'';
+      h+=`<td class="${cls}${click?' clickable':''}"${_bg?` style="${_bg}"`:''}${click?` data-cc="${cc}" data-mm="${m}" data-pp="${pp}" onclick="cellClick(this)"`:''}>${fclp(v)}</td>`;
     });
-    h+=`<td class="neu" style="font-size:11px">${av?fclp(av):'—'}</td></tr>`;
+    h+=`<td class="neu" style="font-size:11px;white-space:nowrap">${av?fclp(av):'—'}${heatBtn(_hk,false)}</td></tr>`;
 
     // Drill-down items
     if(hasItems&&expanded&&concepto&&pl){
@@ -1294,9 +1324,11 @@ function renderPnl(){
         const iVals=M.map(m=>src[m]?.[concepto]?.[it]?-(src[m][concepto][it]):null);
         const iAv=avg(iVals);
         h+=`<tr class="tr-sub" style="opacity:.75">`;
+        const _ihk='p_i_'+(pl||'')+'_'+concepto+'_'+it;
+        const _ihOn=!!heatRows[_ihk];
         h+=`<td style="padding-left:30px;font-size:11px;color:var(--text2)" data-mvt="i" data-mvc="${concepto}" data-mvi="${it}" data-mvp="${pl}">${it}</td>`;
-        iVals.forEach(v=>{h+=`<td class="${cls}" style="font-size:11px">${v&&v!==0?fclp(v):'<span class="neu">—</span>'}</td>`;});
-        h+=`<td class="neu" style="font-size:11px">${iAv?fclp(iAv):'—'}</td></tr>`;
+        iVals.forEach(v=>{const _ibg=_ihOn?heatBg(v,iVals,cls):'';h+=`<td class="${cls}" style="font-size:11px;${_ibg}">${v&&v!==0?fclp(v):'<span class="neu">—</span>'}</td>`;});
+        h+=`<td class="neu" style="font-size:11px;white-space:nowrap">${iAv?fclp(iAv):'—'}${heatBtn(_ihk,false)}</td></tr>`;
       });
     }
   }
@@ -1307,16 +1339,19 @@ function renderPnl(){
   // Cada celda es clickeable: con dato → editar; vacía → agregar.
   function rowIng(lbl, subtipoKey, vals){
     const av = avg(vals.map(v => v || null));
+    const _hk = 'p_ing_' + subtipoKey;
+    const _hOn = !!heatRows[_hk];
     h += '<tr class="tr-sub">';
     h += '<td>' + lbl + '</td>';
     for(let i = 0; i < M.length; i++){
       const v = vals[i] || 0;
       const m = M[i];
-      h += '<td class="pos clickable" onclick="openIngresoEdit(\'' + subtipoKey + '\',\'' + m + '\')" title="' + (v ? 'Click para ver/editar' : 'Click para agregar') + '">';
+      const _bg = _hOn ? heatBg(v, vals, 'pos') : '';
+      h += '<td class="pos clickable"' + (_bg ? ' style="' + _bg + '"' : '') + ' onclick="openIngresoEdit(\'' + subtipoKey + '\',\'' + m + '\')" title="' + (v ? 'Click para ver/editar' : 'Click para agregar') + '">';
       h += v ? fclp(v) : '<span style="color:var(--text3);font-size:10px">+ agregar</span>';
       h += '</td>';
     }
-    h += '<td class="neu" style="font-size:11px">' + (av ? fclp(av) : '—') + '</td></tr>';
+    h += '<td class="neu" style="font-size:11px;white-space:nowrap">' + (av ? fclp(av) : '—') + heatBtn(_hk,false) + '</td></tr>';
   }
   sec('Ingresos');
   rowIng('Sueldo',        'sueldo',    M.map(m => D.pnl[m]?.sueldo    || 0));
@@ -1387,7 +1422,7 @@ function renderPnl(){
 
 // ── P&L CASA ──────────────────────────────────────────────────────
 function renderPnlCasa(){
-  const n=parseInt($('pnl-n-casa').value)||18;
+  const n=parseInt($('pnl-n-casa').value)||6;
   const allM=D.meses_all_casa||[];
   const M=n>=999?allM:allM.slice(-n);
   const avgSel=$('pnl-avg-casa')?.value||'all';
@@ -1405,6 +1440,8 @@ function renderPnlCasa(){
 
   function row(lbl,vals,cls,isSub,isBold,concepto,editPagPor){
     const av=avg(vals);
+    const _hk='c_'+lbl;
+    const _hOn=!!heatRows[_hk];
     const hasItems=concepto&&D.items_casa&&M.some(m=>D.items_casa[m]?.[concepto]);
     const expanded=expandedConcepts['casa_'+(concepto||'')];
     const expBtn=hasItems&&!isBold?
@@ -1417,15 +1454,17 @@ function renderPnlCasa(){
     vals.forEach((v,i)=>{
       const m=M[i];
       if(editPagPor&&m){
-        h+=`<td class="pos clickable" onclick="openCasaAporteEdit('${editPagPor}','${m}')" title="Click para editar/agregar">`;
+        const _bgP=_hOn?heatBg(v,vals,'pos'):'';
+        h+=`<td class="pos clickable"${_bgP?` style="${_bgP}"`:''} onclick="openCasaAporteEdit('${editPagPor}','${m}')" title="Click para editar/agregar">`;
         h+=v?fclp(v):`<span style="color:var(--text3);font-size:10px">+ agregar</span>`;
         h+=`</td>`;return;
       }
       if(!v){h+=`<td class="neu">—</td>`;return;}
       const click=concepto&&m&&!isBold;
-      h+=`<td class="${cls}${click?' clickable':''}"${click?` data-cc="${concepto}" data-mm="${m}" data-pp="casa" onclick="cellClick(this)"`:''}>${fclp(v)}</td>`;
+      const _bg=_hOn?heatBg(v,vals,cls):'';
+      h+=`<td class="${cls}${click?' clickable':''}"${_bg?` style="${_bg}"`:''}${click?` data-cc="${concepto}" data-mm="${m}" data-pp="casa" onclick="cellClick(this)"`:''}>${fclp(v)}</td>`;
     });
-    h+=`<td class="neu" style="font-size:11px">${av?fclp(av):'—'}</td></tr>`;
+    h+=`<td class="neu" style="font-size:11px;white-space:nowrap">${av?fclp(av):'—'}${heatBtn(_hk,true)}</td></tr>`;
 
     if(hasItems&&expanded&&concepto){
       const allIt=new Set();M.forEach(m=>Object.keys(D.items_casa[m]?.[concepto]||{}).forEach(i=>allIt.add(i)));
@@ -1435,8 +1474,10 @@ function renderPnlCasa(){
         const iAv=avg(iVals);
         h+=`<tr class="tr-sub" style="opacity:.75">`;
         h+=`<td style="padding-left:30px;font-size:11px;color:var(--text2)" data-mvt="i" data-mvc="${concepto}" data-mvi="${it}" data-mvp="casa">${it}</td>`;
-        iVals.forEach(v=>{h+=`<td class="${cls}" style="font-size:11px">${v&&v!==0?fclp(v):'<span class="neu">—</span>'}</td>`;});
-        h+=`<td class="neu" style="font-size:11px">${iAv?fclp(iAv):'—'}</td></tr>`;
+        const _ihk='c_i_'+concepto+'_'+it;
+        const _ihOn=!!heatRows[_ihk];
+        iVals.forEach(v=>{const _ibg=_ihOn?heatBg(v,iVals,cls):'';h+=`<td class="${cls}" style="font-size:11px;${_ibg}">${v&&v!==0?fclp(v):'<span class="neu">—</span>'}</td>`;});
+        h+=`<td class="neu" style="font-size:11px;white-space:nowrap">${iAv?fclp(iAv):'—'}${heatBtn(_ihk,true)}</td></tr>`;
       });
     }
   }
@@ -1490,7 +1531,7 @@ function cellClick(td){
 
 
 function getMesesToShow(allM) {
-  const n = parseInt($('sel-periodo')?.value || '18');
+  const n = parseInt($('sel-periodo')?.value || '6');
   return n >= 999 ? allM : allM.slice(-n);
 }
 function getAvgMeses(allM, selId) {
@@ -2058,7 +2099,7 @@ function makePnlClickable(tblId, pl) {
 
   // Construir mapa label corto → mes real (ej: 'Abr 25' → '2025-04')
   const allM = pl==='personal'?(D.meses_all||Object.keys(D.pm).sort()):(D.meses_all_casa||[]);
-  const n = parseInt($(pl==='personal'?'pnl-n':'pnl-n-casa').value)||18;
+  const n = parseInt($(pl==='personal'?'pnl-n':'pnl-n-casa').value)||6;
   const M = n>=999?allM:allM.slice(-n);
   const labelToMes = {};
   M.forEach(m => { labelToMes[mlbl(m)] = m; });
