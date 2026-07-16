@@ -236,7 +236,7 @@ tr:hover .move-btns { opacity:1; }
 <body>
 <script>if(localStorage.getItem('gastos_tema')==='light')document.body.classList.add('light');</script>
 <div class="topbar">
-  <div class="logo" title="v20260715-1429">gastos<em>_</em>app</div>
+  <div class="logo" title="v20260716-1619">gastos<em>_</em>app</div>
   <div class="tabs-top">
     <button class="ttab on" onclick="swP('personal',this)">Personal</button>
     <button class="ttab" onclick="swP('casa',this)">Casa</button>
@@ -325,6 +325,31 @@ tr:hover .move-btns { opacity:1; }
   </div>
 
   <div class="sec">
+    <div class="sec-head" onclick="togS('tend')">
+      <div><div class="sec-title">Tendencias</div><div class="sec-meta" id="meta-tend"></div></div>
+      <span class="sec-toggle" id="tog-tend">▶</span>
+    </div>
+    <div class="sec-body" id="sec-tend">
+      <div style="padding:14px 18px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+          <label style="font-size:11px;color:var(--text2)">Comparar:</label>
+          <select class="ctl" id="tend-win" onchange="renderTend()">
+            <option value="3" selected>Últimos 3 meses vs 3 anteriores</option>
+            <option value="2">Últimos 2 meses vs 2 anteriores</option>
+            <option value="6">Últimos 6 meses vs 6 anteriores</option>
+          </select>
+          <label style="font-size:11px;color:var(--text2);margin-left:8px">Planilla:</label>
+          <select class="ctl" id="tend-pl" onchange="renderTend()">
+            <option value="personal" selected>Personal</option>
+            <option value="casa">Casa</option>
+          </select>
+        </div>
+        <div style="overflow-x:auto"><table id="tbl-tend" style="width:100%;border-collapse:collapse;font-size:12px"></table></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
     <div class="sec-head" onclick="togS('pnl')">
       <span class="sec-title">P&amp;L Personal</span>
       <span class="sec-toggle" id="tog-pnl">▶</span>
@@ -363,7 +388,20 @@ tr:hover .move-btns { opacity:1; }
         <div class="cxp-item">Casa → Bea: <strong id="cxp-bea" class="cxp-neg">—</strong></div>
         <div style="font-size:11px;color:var(--text3);margin-left:auto">Basado en gastos pendientes de reembolso <span id="cxp-toggle-icon">▶</span></div>
       </div>
-      <div id="cxp-detalle" style="display:none;margin-top:12px;overflow-x:auto">
+      <div id="cxp-detalle" style="display:none;margin-top:12px">
+        <!-- Medios de pago por mes -->
+        <div style="margin-bottom:18px">
+          <div style="font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:8px">
+            Gastos Casa por medio de pago
+          </div>
+          <div style="overflow-x:auto">
+            <table id="cxp-medios" style="width:100%;border-collapse:collapse;font-size:12px"></table>
+          </div>
+        </div>
+        <div style="font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:8px">
+          Gastos pendientes de saldar
+        </div>
+        <div style="overflow-x:auto">
         <table style="width:100%;border-collapse:collapse;font-size:12px">
           <thead>
             <tr style="color:var(--text3);font-family:var(--mono);font-size:10px;text-transform:uppercase;border-bottom:1px solid var(--border)">
@@ -377,6 +415,7 @@ tr:hover .move-btns { opacity:1; }
           </thead>
           <tbody id="cxp-detalle-body"></tbody>
         </table>
+        </div>
       </div>
     </div>
 
@@ -904,14 +943,18 @@ function efectSubtipo(h) {
   // Inversiones: SIEMPRE re-derivar por ítem, ignorando subtipo guardado.
   // Datos legacy marcaron todas las inversiones como 'hipotecario', mezclando
   // fondos (Fintual/Toesca/etc) con dividendos hipotecarios de deptos.
-  if(h.tipo === 'inversion' && conc === 'Inversiones') {
+  // Concepto 'Inversiones' = movimiento de inversión SIEMPRE, sin importar el tipo.
+  // Un rescate suele entrar como tipo='ingreso' (transferencia recibida); si no se
+  // captura acá, se contabiliza como ingreso operacional e infla el P&L.
+  if(conc === 'Inversiones') {
     if(item.startsWith('Hipotecario')) return 'hipotecario';
     if(item.startsWith('Contribuciones') || item === 'GGCC/SSBB/Otros') return 'gasto_depto';
-    // Fondos: signo del monto determina aporte vs rescate cuando está disponible
+    // Fondos: un ingreso es plata que vuelve => rescate
+    if(h.tipo === 'ingreso') return 'rescate_fondo';
+    // Signo del monto: negativo = sale plata = aporte
     if(h.monto_original !== undefined && h.monto_original !== null) {
       return h.monto_original < 0 ? 'aporte_fondo' : 'rescate_fondo';
     }
-    // Sin signo (dato histórico): si el subtipo guardado ya es de fondo, respetarlo
     if(h.subtipo === 'aporte_fondo' || h.subtipo === 'rescate_fondo') return h.subtipo;
     return 'aporte_fondo';
   }
@@ -973,7 +1016,18 @@ function buildAggregatedData(){
     D.pnl[m]={
       sueldo:rows.filter(h=>efectSubtipo(h)==='sueldo').reduce((s,h)=>s+h.monto,0),
       bono:rows.filter(h=>efectSubtipo(h)==='bono_otro').reduce((s,h)=>s+h.monto,0),
-      otros_ing:rows.filter(h=>h.tipo==='ingreso'&&!['sueldo','bono_otro'].includes(efectSubtipo(h))&&!(efectSubtipo(h)||'').startsWith('arriendo_')).reduce((s,h)=>s+h.monto,0),
+      // Otros ingresos = ingreso operacional real. Excluye sueldo/bono/arriendos
+      // y TODO movimiento de inversión (un rescate no es ingreso, es plata propia
+      // que vuelve; contarlo acá inflaba el total sin reflejar el aporte que salió).
+      otros_ing:rows.filter(h=>{
+        if(h.tipo!=='ingreso') return false;
+        const st=efectSubtipo(h)||'';
+        if(['sueldo','bono_otro','aporte_fondo','rescate_fondo','hipotecario','gasto_depto'].includes(st)) return false;
+        if(st.startsWith('arriendo_')) return false;
+        return true;
+      }).reduce((s,h)=>s+h.monto,0),
+      inv_aportes:rows.filter(h=>efectSubtipo(h)==='aporte_fondo').reduce((s,h)=>s+h.monto,0),
+      inv_rescates:rows.filter(h=>efectSubtipo(h)==='rescate_fondo').reduce((s,h)=>s+h.monto,0),
       arriendos:{},hipotecarios:{},gastos_admin:0
     };
     rows.filter(h=>h.tipo==='ingreso'&&(efectSubtipo(h)||'').startsWith('arriendo_')).forEach(h=>{
@@ -986,6 +1040,14 @@ function buildAggregatedData(){
       if(d)D.pnl[m].hipotecarios[d]=(D.pnl[m].hipotecarios[d]||0)+h.monto;
     });
     D.pnl[m].gastos_admin=rows.filter(h=>efectSubtipo(h)==='gasto_depto').reduce((s,h)=>s+h.monto,0);
+  });
+  // Gastos de Casa por medio de pago y mes (para Estado de Cuenta Casa)
+  D.casa_medios={};
+  hist.filter(h=>h.planilla==='casa'&&h.tipo==='gasto').forEach(h=>{
+    const k=h.año+'-'+String(h.mes).padStart(2,'0');
+    const med=h.medio_pago||'Sin especificar';
+    if(!D.casa_medios[k])D.casa_medios[k]={};
+    D.casa_medios[k][med]=(D.casa_medios[k][med]||0)+h.monto;
   });
   D.gastos_op={};D.extras={};
   hist.filter(h=>h.planilla==='personal').forEach(h=>{
@@ -1230,11 +1292,12 @@ function renderCards(){
   const gopMes=Object.values(D.gastos_op[mes]||{}).reduce((s,v)=>s+v,0);
   const extraMes=Object.values(D.extras[mes]||{}).reduce((s,v)=>s+v,0);
   const sueldo=p.sueldo||0,bono=p.bono||0,otrosIng=p.otros_ing||0;
+  const netoInvCard=(p.inv_rescates||0)-(p.inv_aportes||0);
   const netoDep=['2201','1902','2103'].reduce((s,d)=>{const pt=PART[d]||1;return s+((p.arriendos?.[d]||0)-(p.hipotecarios?.[d]||0))*pt;},0)-(p.gastos_admin||0);
   const gp=Object.values(D.gastos_op[prevM(mes)]||{}).reduce((s,v)=>s+v,0);
   const pct=gp?((gopMes-gp)/gp*100):0;
   const delt=pct?`<span style="color:${pct>0?'var(--red)':'var(--green)'}">${pct>0?'↑':'↓'}${Math.abs(pct).toFixed(0)}% vs ant.</span>`:'';
-  const bal=sueldo+bono+otrosIng+netoDep-gopMes-extraMes;
+  const bal=sueldo+bono+otrosIng+netoDep-gopMes-extraMes+netoInvCard;
   $('cards').innerHTML=
     crd('var(--red)','Gastos Op.',gopMes,'vr',extraMes>0?'+ '+fk(extraMes)+' extraord.':'sin extraordinarios',delt)+
     crd('var(--green)','Ingresos',sueldo+bono+otrosIng,'vg',bono?fk(sueldo)+' sueldo + '+fk(bono)+' bono':'sueldo mensual','')+
@@ -1262,6 +1325,106 @@ function crd(acc,lbl,val,vcls,sub,dlt){
 }
 
 // ── P&L PERSONAL ──────────────────────────────────────────────────
+
+// ── TENDENCIAS ────────────────────────────────────────────────────────────────
+// Compara el promedio mensual de los últimos N meses contra los N anteriores.
+// Se ordena por impacto en pesos (no por %) porque un +300% sobre $5.000 no
+// mueve la aguja, y un +15% sobre $500.000 sí.
+function renderTend(){
+  const win = parseInt($('tend-win')?.value || '3');
+  const pl  = $('tend-pl')?.value || 'personal';
+  const tbl = $('tbl-tend');
+  if(!tbl) return;
+
+  const allM = (pl==='personal' ? (D.meses_all||[]) : (D.meses_all_casa||[]));
+  const need = win*2;
+  if(allM.length < need){
+    tbl.innerHTML = '<tr><td style="padding:10px;color:var(--text3)">Se necesitan al menos '+need+' meses de datos. Hay '+allM.length+'.</td></tr>';
+    $('meta-tend').textContent='';
+    return;
+  }
+  const recientes = allM.slice(-win);
+  const previos   = allM.slice(-need, -win);
+
+  // Fuente de datos por planilla
+  const getVal = (m, c) => {
+    if(pl==='personal') return D.gastos_op[m]?.[c] || 0;
+    const g = D.gastos_casa[m];
+    if(!g) return 0;
+    return (g.sin_ocio?.[c] || 0) + (g.ocio?.[c] || 0);
+  };
+  const conceptos = new Set();
+  [...recientes, ...previos].forEach(m=>{
+    if(pl==='personal') Object.keys(D.gastos_op[m]||{}).forEach(c=>conceptos.add(c));
+    else { Object.keys(D.gastos_casa[m]?.sin_ocio||{}).forEach(c=>conceptos.add(c));
+           Object.keys(D.gastos_casa[m]?.ocio||{}).forEach(c=>conceptos.add(c)); }
+  });
+
+  const filas = [...conceptos].map(c=>{
+    const avgR = recientes.reduce((s,m)=>s+getVal(m,c),0)/win;
+    const avgP = previos.reduce((s,m)=>s+getVal(m,c),0)/win;
+    const delta = avgR - avgP;
+    const pct = avgP>0 ? (delta/avgP*100) : (avgR>0 ? 100 : 0);
+    return {c, avgR, avgP, delta, pct, esNuevo: avgP===0 && avgR>0, desaparecio: avgR===0 && avgP>0};
+  }).filter(f=>f.avgR>0 || f.avgP>0);
+
+  // Orden por impacto absoluto en pesos
+  filas.sort((a,b)=>Math.abs(b.delta)-Math.abs(a.delta));
+
+  const totalDelta = filas.reduce((s,f)=>s+f.delta,0);
+  const nSube = filas.filter(f=>f.delta>0).length;
+  const nBaja = filas.filter(f=>f.delta<0).length;
+  $('meta-tend').textContent =
+    'Prom. '+win+'m recientes vs '+win+'m previos · '+nSube+' al alza, '+nBaja+' a la baja · Neto: '+
+    (totalDelta>=0?'+':'')+fk(Math.abs(totalDelta)).replace('$','$');
+
+  let h = '<thead><tr style="color:var(--text3);font-family:var(--mono);font-size:10px;text-transform:uppercase;border-bottom:1px solid var(--border)">';
+  h += '<th style="padding:5px 8px;text-align:left;font-weight:400">Concepto</th>';
+  h += '<th style="padding:5px 8px;text-align:right;font-weight:400;white-space:nowrap">Prom. previo</th>';
+  h += '<th style="padding:5px 8px;text-align:right;font-weight:400;white-space:nowrap">Prom. reciente</th>';
+  h += '<th style="padding:5px 8px;text-align:right;font-weight:400">Δ mensual</th>';
+  h += '<th style="padding:5px 8px;text-align:right;font-weight:400">Δ %</th>';
+  h += '<th style="padding:5px 8px;text-align:left;font-weight:400">Tendencia</th></tr></thead><tbody>';
+
+  if(!filas.length){
+    h += '<tr><td colspan="6" style="padding:10px;color:var(--text3)">Sin gastos en el período</td></tr>';
+  }
+
+  const maxAbs = Math.max(...filas.map(f=>Math.abs(f.delta)), 1);
+  filas.forEach(f=>{
+    const sube = f.delta > 0;
+    const col = sube ? 'var(--red)' : 'var(--green)';
+    const flecha = sube ? '▲' : '▼';
+    // Barra proporcional al impacto
+    const w = Math.round(Math.abs(f.delta)/maxAbs*100);
+    let etiqueta;
+    if(f.esNuevo) etiqueta = 'Nuevo';
+    else if(f.desaparecio) etiqueta = 'Sin gasto';
+    else etiqueta = (sube?'+':'')+f.pct.toFixed(0)+'%';
+
+    h += '<tr style="border-bottom:1px solid var(--border)" class="tend-row" data-c="'+f.c+'" data-pl="'+pl+'">';
+    h += '<td style="padding:6px 8px;color:var(--text);cursor:pointer" title="Click para ver en el historial">'+f.c+'</td>';
+    h += '<td style="padding:6px 8px;text-align:right;font-family:var(--mono);color:var(--text3)">'+(f.avgP?fabs(f.avgP):'—')+'</td>';
+    h += '<td style="padding:6px 8px;text-align:right;font-family:var(--mono);color:var(--text2)">'+(f.avgR?fabs(f.avgR):'—')+'</td>';
+    h += '<td style="padding:6px 8px;text-align:right;font-family:var(--mono);color:'+col+';white-space:nowrap">'+(sube?'+':'-')+fabs(Math.abs(f.delta)).replace('$','$')+'</td>';
+    h += '<td style="padding:6px 8px;text-align:right;font-family:var(--mono);color:'+col+';white-space:nowrap">'+flecha+' '+etiqueta+'</td>';
+    h += '<td style="padding:6px 8px;width:38%"><div style="background:'+(sube?'rgba(239,68,68,.22)':'rgba(34,197,94,.22)')+';height:7px;border-radius:3px;width:'+w+'%;min-width:2px"></div></td>';
+    h += '</tr>';
+  });
+  h += '</tbody>';
+  tbl.innerHTML = h;
+
+  // Click en concepto -> filtrar historial
+  tbl.querySelectorAll('.tend-row').forEach(tr=>{
+    tr.querySelector('td').onclick = () => {
+      applyFilter({
+        concepto: tr.dataset.c,
+        planilla: tr.dataset.pl,
+        label: tr.dataset.c + ' · tendencia'
+      });
+    };
+  });
+}
 function renderPnl(){
   const n=parseInt($('pnl-n').value)||6;
   const allM=D.meses_all||[];
@@ -1391,14 +1554,35 @@ function renderPnl(){
   const nd=M.map(m=>{const p=D.pnl[m]||{};return ['2201','1902','2103'].reduce((s,d)=>{const pt=PART[d]||1;return s+((p.arriendos?.[d]||0)-(p.hipotecarios?.[d]||0))*pt;},0)-(p.gastos_admin||0)||null;});
   row('Neto deptos',nd,'',false,true,null,null);
 
-  // Balance
-  sec('Balance');
-  const bal=M.map(m=>{
+  // Flujo neto ANTES de inversiones = lo que quedó disponible para invertir.
+  // Se calcula una sola vez y el Balance lo reutiliza, así nunca se desincronizan.
+  const flujoNeto=M.map(m=>{
     const p=D.pnl[m]||{};
     const gop=Object.values(D.gastos_op[m]||{}).reduce((s,v)=>s+v,0);
     const ext=Object.values(D.extras[m]||{}).reduce((s,v)=>s+v,0);
-    const nd2=['2201','1902','2103'].reduce((s,d)=>{const pt=PART[d]||1;return s+((p.arriendos?.[d]||0)-(p.hipotecarios?.[d]||0))*pt;},0)-(p.gastos_admin||0);
-    return ((p.sueldo||0)+(p.bono||0)+(p.otros_ing||0)+nd2-gop-ext)||null;
+    const ndm=['2201','1902','2103'].reduce((s,d)=>{const pt=PART[d]||1;return s+((p.arriendos?.[d]||0)-(p.hipotecarios?.[d]||0))*pt;},0)-(p.gastos_admin||0);
+    return (p.sueldo||0)+(p.bono||0)+(p.otros_ing||0)+ndm-gop-ext;
+  });
+  sec('Flujo neto antes de inversiones');
+  row('Disponible para invertir',flujoNeto.map(v=>v||null),'',false,true,null,null);
+
+  // Inversiones financieras (aportes = plata que sale, rescates = plata que vuelve)
+  {
+    const anyInv=M.some(m=>(D.pnl[m]?.inv_aportes||0)>0||(D.pnl[m]?.inv_rescates||0)>0);
+    if(anyInv){
+      sec('Inversiones financieras');
+      row('Aportes a fondos',M.map(m=>D.pnl[m]?.inv_aportes?-(D.pnl[m].inv_aportes):null),'neg',true,false,null,null);
+      row('Rescates de fondos',M.map(m=>D.pnl[m]?.inv_rescates||null),'pos',true,false,null,null);
+      row('Neto inversiones',M.map(m=>((D.pnl[m]?.inv_rescates||0)-(D.pnl[m]?.inv_aportes||0))||null),'',false,true,null,null);
+    }
+  }
+
+  // Balance
+  sec('Balance');
+  const bal=M.map((m,i)=>{
+    const p=D.pnl[m]||{};
+    const netoInv=(p.inv_rescates||0)-(p.inv_aportes||0);
+    return (flujoNeto[i]+netoInv)||null;
   });
   row('Balance neto',bal,'',false,true,null,null);
   h+='</tbody>';
@@ -2290,6 +2474,7 @@ function togS(id){
     else if(id==='dep')renderDep();
     else if(id==='inv')renderInv();
     else if(id==='pnl')renderPnl();
+    else if(id==='tend')renderTend();
   }
 }
 function togSC(id){
@@ -2328,6 +2513,7 @@ function upd(){
     if($('sec-dep').classList.contains('open'))renderDep();
     if($('sec-inv').classList.contains('open'))renderInv();
     if($('sec-pnl').classList.contains('open'))renderPnl();
+    if($('sec-tend')?.classList.contains('open'))renderTend();
   } else {
     renderGopCasa();
     if($('sec-ocio-casa').classList.contains('open'))renderOcioCasa();
@@ -3204,7 +3390,69 @@ function toggleCxP() {
   if(icon) icon.textContent = open ? '▼' : '▶';
   if(open) renderCxPDetalle();
 }
+function renderCxPMedios() {
+  const tbl=$('cxp-medios');
+  if(!tbl) return;
+  const M=getMesesToShow(D.meses_all_casa||[]);
+  if(!M.length){ tbl.innerHTML='<tr><td style="color:var(--text3);padding:8px">Sin datos</td></tr>'; return; }
+  // Medios presentes en el período
+  const medios=new Set();
+  M.forEach(m=>Object.keys(D.casa_medios?.[m]||{}).forEach(x=>medios.add(x)));
+  const medArr=[...medios].sort((a,b)=>a==='Sin especificar'?1:b==='Sin especificar'?-1:a.localeCompare(b,'es'));
+  if(!medArr.length){ tbl.innerHTML='<tr><td style="color:var(--text3);padding:8px">Sin gastos de Casa en el período</td></tr>'; return; }
+
+  let h='<thead><tr style="color:var(--text3);font-family:var(--mono);font-size:10px;text-transform:uppercase;border-bottom:1px solid var(--border)">';
+  h+='<th style="padding:4px 8px;text-align:left;font-weight:400">Medio de pago</th>';
+  M.forEach(m=>h+='<th style="padding:4px 8px;text-align:right;font-weight:400;white-space:nowrap">'+mlbl(m)+'</th>');
+  h+='<th style="padding:4px 8px;text-align:right;font-weight:400">Total</th></tr></thead><tbody>';
+
+  medArr.forEach(med=>{
+    const vals=M.map(m=>D.casa_medios?.[m]?.[med]||0);
+    const tot=vals.reduce((s,v)=>s+v,0);
+    const esSinEsp = med==='Sin especificar';
+    h+='<tr style="border-bottom:1px solid var(--border)">';
+    // Nombre del medio: click => filtra ese medio en TODOS los meses del período
+    h+='<td class="cxp-med-cell" data-med="'+med+'" data-mes="" '+
+       'style="padding:5px 8px;color:'+(esSinEsp?'var(--amber)':'var(--text)')+';white-space:nowrap;cursor:pointer" '+
+       'title="Click para ver estos movimientos en el historial">'+med+(esSinEsp?' ⚠':'')+'</td>';
+    // Cada mes: click => filtra ese medio en ese mes
+    vals.forEach((v,i)=>{
+      h+='<td'+(v?' class="cxp-med-cell" data-med="'+med+'" data-mes="'+M[i]+'" title="Click para ver estos movimientos"':'')+
+         ' style="padding:5px 8px;text-align:right;font-family:var(--mono);color:'+(v?'var(--red)':'var(--text3)')+(v?';cursor:pointer':'')+'">'+
+         (v?fabs(v):'—')+'</td>';
+    });
+    h+='<td style="padding:5px 8px;text-align:right;font-family:var(--mono);color:var(--text2)">'+(tot?fabs(tot):'—')+'</td></tr>';
+  });
+
+  // Fila total
+  const totM=M.map(m=>Object.values(D.casa_medios?.[m]||{}).reduce((s,v)=>s+v,0));
+  const granTot=totM.reduce((s,v)=>s+v,0);
+  h+='<tr style="border-top:1px solid var(--border2);font-weight:500">';
+  h+='<td style="padding:6px 8px;color:var(--text)">Total</td>';
+  totM.forEach(v=>h+='<td style="padding:6px 8px;text-align:right;font-family:var(--mono);color:var(--red)">'+(v?fabs(v):'—')+'</td>');
+  h+='<td style="padding:6px 8px;text-align:right;font-family:var(--mono);color:var(--red)">'+(granTot?fabs(granTot):'—')+'</td></tr>';
+  h+='</tbody>';
+  tbl.innerHTML=h;
+
+  // Click => filtrar historial. stopPropagation porque el contenedor cxp-box
+  // tiene su propio onclick que colapsaría el panel.
+  tbl.querySelectorAll('.cxp-med-cell').forEach(td=>{
+    td.onclick=(e)=>{
+      e.stopPropagation();
+      const med=td.dataset.med;
+      const mes=td.dataset.mes||null;
+      applyFilter({
+        planilla:'casa',
+        tiposIncluir:['gasto'],
+        medioPago:med,
+        mes:mes,
+        label:med+(mes?' · '+mlbl(mes):' · todos los meses')
+      });
+    };
+  });
+}
 function renderCxPDetalle() {
+  renderCxPMedios();
   const tbody = $('cxp-detalle-body');
   if(!tbody) return;
   const movs = (D.hist||[])
@@ -3607,6 +3855,12 @@ function filtH() {
         } else {
           if(stActual !== stf) return false;
         }
+      }
+      // Filtro por medio de pago. La tabla de Casa agrupa por medio_pago||'Sin especificar',
+      // así que el filtro usa la misma convención para que coincidan los totales.
+      if(activeFilter.medioPago) {
+        const mp = h.medio_pago || 'Sin especificar';
+        if(mp !== activeFilter.medioPago) return false;
       }
       // Filtro por ítem (extraordinarios). D.extras agrupa por item||'Otros'
       if(activeFilter.item) {
