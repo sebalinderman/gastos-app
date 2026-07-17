@@ -236,7 +236,7 @@ tr:hover .move-btns { opacity:1; }
 <body>
 <script>if(localStorage.getItem('gastos_tema')==='light')document.body.classList.add('light');</script>
 <div class="topbar">
-  <div class="logo" title="v20260716-1619">gastos<em>_</em>app</div>
+  <div class="logo" title="v20260717-0005">gastos<em>_</em>app</div>
   <div class="tabs-top">
     <button class="ttab on" onclick="swP('personal',this)">Personal</button>
     <button class="ttab" onclick="swP('casa',this)">Casa</button>
@@ -698,7 +698,7 @@ Ejemplos:
             <th style="font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--text3);padding:8px 12px;border-bottom:1px solid var(--border);font-weight:400;background:var(--bg2);position:sticky;top:0;z-index:3">Tipo</th>
             <th style="font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--text3);padding:8px 12px;border-bottom:1px solid var(--border);text-align:left;font-weight:400;background:var(--bg2);position:sticky;top:0;z-index:3">Concepto / Ítem</th>
             <th style="font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--text3);padding:8px 12px;border-bottom:1px solid var(--border);text-align:right;font-weight:400;background:var(--bg2);position:sticky;top:0;z-index:3">Monto</th>
-            <th style="font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--text3);padding:8px 12px;border-bottom:1px solid var(--border);text-align:left;font-weight:400;background:var(--bg2);position:sticky;top:0;z-index:3">Medio</th>
+            <th style="font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--text3);padding:8px 12px;border-bottom:1px solid var(--border);text-align:left;font-weight:400;background:var(--bg2);position:sticky;top:0;z-index:3">Medio / Pagado por</th>
             <th style="font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--text3);padding:8px 12px;border-bottom:1px solid var(--border);text-align:left;font-weight:400;background:var(--bg2);position:sticky;top:0;z-index:3">Comentario</th>
             <th style="background:var(--bg2);padding:8px 12px;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:3"></th>
           </tr></thead>
@@ -1280,10 +1280,6 @@ function addMoveButtons(tblId){
 }
 
 // ── getMesesToShow ─────────────────────────────────────────────────
-function getMesesToShow(allM){
-  const n=parseInt($('sel-periodo')?.value||'6');
-  return n>=999?allM:allM.slice(-n);
-}
 
 // ── CARDS ─────────────────────────────────────────────────────────
 function renderCards(){
@@ -2150,10 +2146,14 @@ function applyFilter(f) {
   $('filter-desc').textContent = 'Filtrando: ' + f.label;
   // Scroll al historial
   $('sec-hist').closest('.sec')?.scrollIntoView({behavior:'smooth', block:'start'});
-  // Asegurar que historial esté abierto
-  if(!$('sec-hist').classList.contains('open')) {
-    $('sec-hist').classList.add('open');
-    $('tog-hist').textContent='▼';
+  // Asegurar que historial esté abierto.
+  // Ojo: 'tog-hist' no existe en el DOM; sin el guard esto lanzaba TypeError
+  // y mataba applyFilter antes de filtrar.
+  const secH=$('sec-hist');
+  if(secH && !secH.classList.contains('open')) {
+    secH.classList.add('open');
+    const togH=$('tog-hist');
+    if(togH) togH.textContent='▼';
   }
   filtH();
 }
@@ -2266,7 +2266,7 @@ function addDepClick(chartId, mesesArr) {
       concepto: null,
       mes: mesLabel,
       planilla: 'personal',
-      tiposIncluir: ['ingreso','inversion'],
+      soloDeptos: true,
       label: 'Departamentos · ' + mlbl(mesLabel)
     });
   };
@@ -2345,9 +2345,9 @@ function toggleSortFecha(){
 }
 function dlHist(){
   const rows=histFiltered.length?histFiltered:D.hist;
-  const csv='Fecha,Planilla,Tipo,Concepto,Item,Monto,Medio,Comentario\n'+
+  const csv='Fecha,Planilla,Tipo,Concepto,Item,Monto,Medio,Pagado por,Comentario\n'+
     rows.map(h=>[h.fecha,h.planilla,h.tipo,h.concepto||'',h.item||'',h.monto,
-      h.medio_pago||h.pagado_por||'',(h.comentario||'').replace(/,/g,';')].join(',')).join('\n');
+      h.medio_pago||'',h.pagado_por||'',(h.comentario||'').replace(/,/g,';')].join(',')).join('\n');
   const a=document.createElement('a');
   a.href='data:text/csv;charset=utf-8,'+encodeURIComponent('\uFEFF'+csv);
   a.download='gastos_'+new Date().toISOString().slice(0,10)+'.csv';
@@ -3434,22 +3434,23 @@ function renderCxPMedios() {
   h+='</tbody>';
   tbl.innerHTML=h;
 
-  // Click => filtrar historial. stopPropagation porque el contenedor cxp-box
-  // tiene su propio onclick que colapsaría el panel.
-  tbl.querySelectorAll('.cxp-med-cell').forEach(td=>{
-    td.onclick=(e)=>{
-      e.stopPropagation();
-      const med=td.dataset.med;
-      const mes=td.dataset.mes||null;
-      applyFilter({
-        planilla:'casa',
-        tiposIncluir:['gasto'],
-        medioPago:med,
-        mes:mes,
-        label:med+(mes?' · '+mlbl(mes):' · todos los meses')
-      });
-    };
-  });
+  // Click => filtrar historial. Delegación en la tabla: sobrevive re-renders
+  // y captura clicks en elementos hijos. stopPropagation porque el contenedor
+  // cxp-box tiene su propio onclick que colapsaría el panel.
+  tbl.onclick=(e)=>{
+    const td=e.target.closest('.cxp-med-cell');
+    if(!td) return;
+    e.stopPropagation();
+    const med=td.dataset.med;
+    const mes=td.dataset.mes||null;
+    applyFilter({
+      planilla:'casa',
+      tipos:['gasto'],
+      medioPago:med,
+      mes:mes,
+      label:med+(mes?' · '+mlbl(mes):' · todos los meses')
+    });
+  };
 }
 function renderCxPDetalle() {
   renderCxPMedios();
@@ -3877,9 +3878,14 @@ function filtH() {
           if(!com.includes(activeFilter.entidad.toUpperCase())) return false;
         }
       }
-      // Filtro por tipos (deptos)
-      if(activeFilter.tiposIncluir) {
-        // Deptos: arriendos (ingreso, concepto Arriendo*) + hipotecarios (inversion, item Hipotecario*)
+      // Filtro genérico por tipo de movimiento (gasto/ingreso/inversion/...)
+      if(activeFilter.tipos) {
+        if(!activeFilter.tipos.includes(h.tipo)) return false;
+      }
+      // Filtro específico de Departamentos: arriendos + hipotecarios + contribuciones.
+      // OJO: antes se llamaba 'tiposIncluir', nombre que hacía pensar que era un
+      // filtro genérico por tipo. No lo es: exige que sea un movimiento de depto.
+      if(activeFilter.soloDeptos) {
         const esArriendo = h.tipo==='ingreso' && (h.concepto||'').includes('Arriendo');
         const esHipotecario = h.tipo==='inversion' && (h.item||'').includes('Hipotecario');
         const esGastoDepto = h.tipo==='inversion' && (h.item||'').includes('Contribuciones');
@@ -3899,7 +3905,7 @@ function filtH() {
       <td><span class="badge bt-${h.tipo}">${{'gasto':'Gasto','ingreso':'Ingreso','inversion':'Inversión','devolucion':'Reembolso','transferencia_interna':'Transf.'}[h.tipo]||h.tipo}</span></td>
       <td style="text-align:left;color:var(--text)">${h.concepto||'—'}${h.item?` <span style="color:var(--text3)">/ ${h.item}</span>`:''}</td>
       <td style="text-align:right;color:${h.tipo==='gasto'?'var(--red)':h.tipo==='ingreso'?'var(--green)':'var(--text2)'}">${fabs(h.monto)}</td>
-      <td style="text-align:left;color:var(--text3)">${h.medio_pago||h.pagado_por||'—'}</td>
+      <td style="text-align:left;color:var(--text)">${h.medio_pago||'—'}${h.pagado_por?` <span style="color:var(--text3)">/ ${h.pagado_por}</span>`:''}</td>
       <td style="text-align:left;color:var(--text3);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(h.comentario||'').replace(/"/g,"'")}">${h.comentario||'—'}</td>
       <td style="white-space:nowrap">
         <button class="ebtn" onclick="openMod(${h.id})" title="Editar">✎</button>
