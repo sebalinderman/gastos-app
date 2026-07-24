@@ -236,7 +236,7 @@ tr:hover .move-btns { opacity:1; }
 <body>
 <script>if(localStorage.getItem('gastos_tema')==='light')document.body.classList.add('light');</script>
 <div class="topbar">
-  <div class="logo" title="v20260717-0005">gastos<em>_</em>app</div>
+  <div class="logo" title="v20260724-1948">gastos<em>_</em>app</div>
   <div class="tabs-top">
     <button class="ttab on" onclick="swP('personal',this)">Personal</button>
     <button class="ttab" onclick="swP('casa',this)">Casa</button>
@@ -259,6 +259,15 @@ tr:hover .move-btns { opacity:1; }
 </div>
 
 <div class="main">
+  <div id="snap-controls" style="display:none;align-items:center;gap:8px;margin-bottom:10px">
+    <span style="font-size:11px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em">Resumen:</span>
+    <select class="ctl" id="snap-win" onchange="renderCards()" style="font-size:12px">
+      <option value="3" selected>Últimos 3m vs 3m previos</option>
+      <option value="2">Últimos 2m vs 2m previos</option>
+      <option value="6">Últimos 6m vs 6m previos</option>
+      <option value="1">Solo último mes</option>
+    </select>
+  </div>
   <div class="cards" id="cards"></div>
 
   <!-- ══ PERSONAL ══ -->
@@ -1062,7 +1071,16 @@ function buildAggregatedData(){
   // 'hipotecario' y 'gasto_depto' NUNCA entran aquí (son pagos de dividendo/GGCC de deptos,
   // van al P&L de Departamentos). Solo fondos de inversión: aporte_fondo / rescate_fondo.
   hist.filter(h=>h.planilla==='personal'&&(efectSubtipo(h)==='aporte_fondo'||efectSubtipo(h)==='rescate_fondo'))
-  .forEach(h=>{const k=h.año+'-'+String(h.mes).padStart(2,'0');if(!D.inversiones_ent[k])D.inversiones_ent[k]={aportes:{},rescates:{}};const com=(h.comentario||'').toUpperCase();let ent='Otros';for(const e of ENTS){if(com.includes(e.toUpperCase())){ent=e;break;}}if(efectSubtipo(h)==='aporte_fondo')D.inversiones_ent[k].aportes[ent]=(D.inversiones_ent[k].aportes[ent]||0)+h.monto;else D.inversiones_ent[k].rescates[ent]=(D.inversiones_ent[k].rescates[ent]||0)+h.monto;});
+  .forEach(h=>{
+    const k=h.año+'-'+String(h.mes).padStart(2,'0');
+    if(!D.inversiones_ent[k])D.inversiones_ent[k]={aportes:{},rescates:{}};
+    // Entidad: primero el ítem (Fintual/Toesca/...), sino buscar en el comentario.
+    let ent='Otros';
+    if(ENTS.includes(h.item)) ent=h.item;
+    else { const com=(h.comentario||'').toUpperCase(); for(const e of ENTS){if(com.includes(e.toUpperCase())){ent=e;break;}} }
+    if(efectSubtipo(h)==='aporte_fondo')D.inversiones_ent[k].aportes[ent]=(D.inversiones_ent[k].aportes[ent]||0)+h.monto;
+    else D.inversiones_ent[k].rescates[ent]=(D.inversiones_ent[k].rescates[ent]||0)+h.monto;
+  });
   D.gastos_casa={};D.pnl_casa={};
   D.meses_all_casa.forEach(m=>{const[y,mo]=m.split('-').map(Number);const rows=hist.filter(h=>h.planilla==='casa'&&h.año===y&&h.mes===mo);const sin={},ocio={};const accCasa={};rows.forEach(h=>{const neto=h.tipo==='gasto'?h.monto:h.tipo==='devolucion'?-h.monto:0;if(neto===0)return;const c=h.concepto||'Otros';accCasa[c]=(accCasa[c]||0)+neto;});Object.entries(accCasa).forEach(([c,v])=>{if(v<=0)return;if(OCIO.has(c))ocio[c]=(ocio[c]||0)+v;else sin[c]=(sin[c]||0)+v;});D.gastos_casa[m]={sin_ocio:sin,ocio:ocio};const tS=Object.values(sin).reduce((s,v)=>s+v,0),tO=Object.values(ocio).reduce((s,v)=>s+v,0);const apS=rows.filter(h=>h.tipo==='ingreso'&&h.pagado_por==='Seba').reduce((s,h)=>s+h.monto,0);const apB=rows.filter(h=>h.tipo==='ingreso'&&h.pagado_por==='Bea').reduce((s,h)=>s+h.monto,0);D.pnl_casa[m]={gastos_sin_ocio:sin,gastos_ocio:ocio,total_sin_ocio:tS,total_ocio:tO,total_gastos:tS+tO,seba:apS,bea:apB,total_aportes:apS+apB,saldo:apS+apB-(tS+tO)};});
   D.items_personal={};D.items_casa={};
@@ -1097,7 +1115,7 @@ async function bootApp(){
 
 
 const CONCEPTOS_DB={"personal": ["Carrete", "Casa", "Comida", "Comida Afuera", "Compras", "Deporte", "Extraordinarios", "Perros", "Pichilemu", "Salud", "Transporte", "Viajes/Playa", "Otros"], "casa": ["Casa", "Eloísa", "Regalos", "Salud", "Supermercado", "Suscripciones", "Terreno", "Transporte", "Comida Afuera", "Panoramas", "Carrete", "Viajes/Playa", "Otros"]};
-const ITEMS_DB={"personal": {"Comida": ["Almuerzo", "Snack", "Chinos", "Master Rod", "Desayuno", "Café", "Otros"], "Transporte": ["Uber/Cabify", "Bencina", "Tag", "Seguros", "Mantenciones", "Didi", "Metro", "Documentos", "Parking", "Otros"], "Deporte": ["Pádel", "Gimnasio", "Indumentaria", "Carrera", "DeCero", "Bici", "Suplementos", "Golf", "Otros"], "Compras": ["Regalos", "Ropa", "Personal", "Suscripciones", "Ropa Pega", "Otros"], "Salud": ["Corte de Pelo", "Farmacia", "Doctor", "Dentista", "Otros"], "Carrete": ["Casa", "Bar", "Bar/Disco", "Copete", "Asado", "Matrimonio", "Disco", "Bajón", "Taxi", "Otros"], "Comida Afuera": ["Restaurante", "Delivery", "Café", "Otros"], "Viajes/Playa": ["Splitwise", "Comidas/Compras", "Alojamiento", "Bus", "Pasajes", "Otros"], "Inversiones": ["Hipotecario 1902", "Hipotecario 2201", "Hipotecario 2103", "Otras Inversiones", "GGCC/SSBB/Otros", "Contribuciones 1902", "Contribuciones 2201", "Contribuciones 2103"], "Otros": ["Gastos Bancarios", "Donaciones", "Seguros", "Parte", "Chat GPT", "Tintorería", "Impuestos", "Otros"], "Perros": ["Comida", "Veterinario", "Otros"], "Pichilemu": ["Casa", "Cosas Casa", "Otros"], "Eloísa": ["Clínica", "Compras", "Farmacia", "Salud", "Doctor", "Leche", "Otros"], "Extraordinarios": ["Vacaciones", "Bici/Moto", "Estudios", "Imponderables", "Otros"], "Casa": ["Comida u Otro", "Compras Generales", "Otros"]}, "casa": {"Casa": ["Arriendo", "Gastos Comunes", "Nana", "Agua", "Luz", "Gas", "Internet", "Compras Casa", "Otros"], "Supermercado": ["Líder", "Tottus", "Ok Market", "Oxxo", "Cuk", "Copec", "Unimarc", "Jumbo", "Otros"], "Transporte": ["Bencina", "Uber/Cabify/Didi", "Tag", "Seguros", "Estacionamiento", "Mantenciones", "Otros"], "Suscripciones": ["Spotify", "Netflix", "Zapping", "Apple", "Otros"], "Comida Afuera": ["Restaurante", "Niu Sushi", "Sushi", "Nelí", "Otros"], "Viajes/Playa": ["Supermercado", "Splitwise", "Bus", "Alojamiento", "Cafés", "Otros"], "Eloísa": ["Clínica", "Compras", "Farmacia", "Salud", "Doctor", "Leche", "Otros"], "Regalos": ["Matrimonio", "Cumpleaños", "Bautizo", "Baby shower", "Navidad", "Otros"], "Carrete": ["Bar/Disco", "Bar", "Asado", "Carrete Casa", "Otros"], "Salud": ["Farmacia", "Doctor", "Dentista", "Otros"], "Panoramas": ["Cine", "Otros"], "Terreno": ["GGCC", "Otros"], "Otros": ["Gastos Bancarios", "Seguros", "Otros"]}};
+const ITEMS_DB={"personal": {"Comida": ["Almuerzo", "Snack", "Chinos", "Master Rod", "Desayuno", "Café", "Otros"], "Transporte": ["Uber/Cabify", "Bencina", "Tag", "Seguros", "Mantenciones", "Didi", "Metro", "Documentos", "Parking", "Otros"], "Deporte": ["Pádel", "Gimnasio", "Indumentaria", "Carrera", "DeCero", "Bici", "Suplementos", "Golf", "Otros"], "Compras": ["Regalos", "Ropa", "Personal", "Suscripciones", "Ropa Pega", "Otros"], "Salud": ["Corte de Pelo", "Farmacia", "Doctor", "Dentista", "Otros"], "Carrete": ["Casa", "Bar", "Bar/Disco", "Copete", "Asado", "Matrimonio", "Disco", "Bajón", "Taxi", "Otros"], "Comida Afuera": ["Restaurante", "Delivery", "Café", "Otros"], "Viajes/Playa": ["Splitwise", "Comidas/Compras", "Alojamiento", "Bus", "Pasajes", "Otros"], "Inversiones": ["Fintual", "Toesca", "Racional", "Security", "Budacom", "Capitaria", "Hipotecario 1902", "Hipotecario 2201", "Hipotecario 2103", "GGCC/SSBB/Otros", "Contribuciones 1902", "Contribuciones 2201", "Contribuciones 2103", "Otras Inversiones"], "Otros": ["Gastos Bancarios", "Donaciones", "Seguros", "Parte", "Chat GPT", "Tintorería", "Impuestos", "Otros"], "Perros": ["Comida", "Veterinario", "Otros"], "Pichilemu": ["Casa", "Cosas Casa", "Otros"], "Eloísa": ["Clínica", "Compras", "Farmacia", "Salud", "Doctor", "Leche", "Otros"], "Extraordinarios": ["Vacaciones", "Bici/Moto", "Estudios", "Imponderables", "Otros"], "Casa": ["Comida u Otro", "Compras Generales", "Otros"]}, "casa": {"Casa": ["Arriendo", "Gastos Comunes", "Nana", "Agua", "Luz", "Gas", "Internet", "Compras Casa", "Otros"], "Supermercado": ["Líder", "Tottus", "Ok Market", "Oxxo", "Cuk", "Copec", "Unimarc", "Jumbo", "Otros"], "Transporte": ["Bencina", "Uber/Cabify/Didi", "Tag", "Seguros", "Estacionamiento", "Mantenciones", "Otros"], "Suscripciones": ["Spotify", "Netflix", "Zapping", "Apple", "Otros"], "Comida Afuera": ["Restaurante", "Niu Sushi", "Sushi", "Nelí", "Otros"], "Viajes/Playa": ["Supermercado", "Splitwise", "Bus", "Alojamiento", "Cafés", "Otros"], "Eloísa": ["Clínica", "Compras", "Farmacia", "Salud", "Doctor", "Leche", "Otros"], "Regalos": ["Matrimonio", "Cumpleaños", "Bautizo", "Baby shower", "Navidad", "Otros"], "Carrete": ["Bar/Disco", "Bar", "Asado", "Carrete Casa", "Otros"], "Salud": ["Farmacia", "Doctor", "Dentista", "Otros"], "Panoramas": ["Cine", "Otros"], "Terreno": ["GGCC", "Otros"], "Otros": ["Gastos Bancarios", "Seguros", "Otros"]}};
 const PART={"2201": 1.0, "1902": 0.5, "2103": 0.5};
 const CATCOL={"Comida": "#60A5FA", "Transporte": "#FBBF24", "Perros": "#F472B6", "Pichilemu": "#34D399", "Deporte": "#F87171", "Carrete": "#A78BFA", "Comida Afuera": "#FB923C", "Salud": "#2DD4BF", "Viajes/Playa": "#818CF8", "Compras": "#E879F9", "Otros": "#6B7280", "Casa": "#94A3B8", "Elo\u00edsa": "#F472B6"};
 const CCOL={"Casa": "#60A5FA", "Supermercado": "#4ADE80", "Transporte": "#FBBF24", "Elo\u00edsa": "#F472B6", "Salud": "#2DD4BF", "Suscripciones": "#A78BFA", "Regalos": "#FB923C", "Terreno": "#94A3B8", "Otros": "#6B7280", "Comida Afuera": "#F87171", "Panoramas": "#818CF8", "Viajes/Playa": "#34D399", "Carrete": "#E879F9"};
@@ -1105,7 +1123,7 @@ const CCOL={"Casa": "#60A5FA", "Supermercado": "#4ADE80", "Transporte": "#FBBF24
 function ccp(c){return CATCOL[c]||'#6B7280';}
 function cc(c){return CCOL[c]||'#6B7280';}
 const ENTCOL={"Fintual": "#60A5FA", "Toesca": "#4ADE80", "Racional": "#FBBF24", "Security": "#F87171", "Budacom": "#C084FC", "Capitaria": "#2DD4BF", "Otros": "#6B7280"};
-const REGLAS=[{"patron": "COPEC|SHELL|PETROBRAS|PETRO7|BENCIN", "planilla": "personal", "concepto": "Transporte", "item": "Bencina"}, {"patron": "TAG|RUTA PASS|AUTOPASE|COSTANERA|UNIRED|VIAS|AUTOPISTA", "planilla": "personal", "concepto": "Transporte", "item": "Tag"}, {"patron": "UBER|CABIFY|DIDI|PAYU.*UBER|BEAT ", "planilla": "personal", "concepto": "Transporte", "item": "Uber/Cabify"}, {"patron": "LAVADO|CAR WASH|AUTOMATIC", "planilla": "personal", "concepto": "Transporte", "item": "Mantenciones"}, {"patron": "LIDER|TOTTUS|JUMBO|UNIMARC|SANTA ISABEL|WALMART|ACUENTA", "planilla": "casa", "concepto": "Supermercado", "item": null}, {"patron": "NEAT|ARRIENDO", "planilla": "casa", "concepto": "Casa", "item": "Arriendo"}, {"patron": "SODIMAC|EASY|HOME DEPOT|IMPERIAL", "planilla": "casa", "concepto": "Casa", "item": "Compras Casa"}, {"patron": "AGUAS CORDI|AGUAS ANDINAS", "planilla": "casa", "concepto": "Casa", "item": "Agua"}, {"patron": "METROGAS|LIPIGAS|GASCO", "planilla": "casa", "concepto": "Casa", "item": "Gas"}, {"patron": "VTR|CLARO|ENTEL|MOVISTAR|MUNDO PACIFICO", "planilla": "casa", "concepto": "Casa", "item": "Internet"}, {"patron": "MOVIKIDS|NANA|ASISTENTE", "planilla": "casa", "concepto": "Casa", "item": "Nana"}, {"patron": "SPOTIFY", "planilla": "casa", "concepto": "Suscripciones", "item": "Spotify"}, {"patron": "NETFLIX", "planilla": "casa", "concepto": "Suscripciones", "item": "Netflix"}, {"patron": "ZAPPING", "planilla": "casa", "concepto": "Suscripciones", "item": "Zapping"}, {"patron": "APPLE.COM|APPLE INC", "planilla": "casa", "concepto": "Suscripciones", "item": "Apple"}, {"patron": "MASTER ROD|MASTEROD", "planilla": "personal", "concepto": "Comida", "item": "Master Rod"}, {"patron": "RAPPI|PEDIDOS YA|UBER EATS|IFOOD", "planilla": "personal", "concepto": "Comida Afuera", "item": "Delivery"}, {"patron": "FARMACIA|CRUZ VERDE|AHUMADA|SALCO|DR\\.", "planilla": "personal", "concepto": "Salud", "item": "Farmacia"}, {"patron": "CLINICA|HOSPITAL|MEDICO|CESFAM|IST ", "planilla": "personal", "concepto": "Salud", "item": "Doctor"}, {"patron": "FINTUAL", "planilla": "personal", "concepto": "Inversiones", "item": "Otras Inversiones"}, {"patron": "TOESCA", "planilla": "personal", "concepto": "Inversiones", "item": "Otras Inversiones"}, {"patron": "RACIONAL", "planilla": "personal", "concepto": "Inversiones", "item": "Otras Inversiones"}, {"patron": "SECURITY|VALORES SECURITY", "planilla": "personal", "concepto": "Inversiones", "item": "Otras Inversiones"}, {"patron": "CAPITARIA", "planilla": "personal", "concepto": "Inversiones", "item": "Otras Inversiones"}, {"patron": "BUDACOM", "planilla": "personal", "concepto": "Inversiones", "item": "Otras Inversiones"}, {"patron": "PUPPIES|PETCO|PETSHOP|ROYAL CANIN|AGROSUP", "planilla": "personal", "concepto": "Perros", "item": null}, {"patron": "PICHI|CABANA|HOSTAL.*PICHI", "planilla": "personal", "concepto": "Pichilemu", "item": null}, {"patron": "TRANSF.*TARJETA|PAGO.*TARJETA|PAGO.*TC|PAGO.*CMR|PAGO.*FALABELLA", "planilla": null, "concepto": "transferencia_interna", "item": null}, {"patron": "TRANSF.*SEBASTIAN.*LINDERMAN|TRANSF.*S.*LINDERMAN", "planilla": null, "concepto": "transferencia_interna", "item": null}];
+const REGLAS=[{"patron": "COPEC|SHELL|PETROBRAS|PETRO7|BENCIN", "planilla": "personal", "concepto": "Transporte", "item": "Bencina"}, {"patron": "TAG|RUTA PASS|AUTOPASE|COSTANERA|UNIRED|VIAS|AUTOPISTA", "planilla": "personal", "concepto": "Transporte", "item": "Tag"}, {"patron": "UBER|CABIFY|DIDI|PAYU.*UBER|BEAT ", "planilla": "personal", "concepto": "Transporte", "item": "Uber/Cabify"}, {"patron": "LAVADO|CAR WASH|AUTOMATIC", "planilla": "personal", "concepto": "Transporte", "item": "Mantenciones"}, {"patron": "LIDER|TOTTUS|JUMBO|UNIMARC|SANTA ISABEL|WALMART|ACUENTA", "planilla": "casa", "concepto": "Supermercado", "item": null}, {"patron": "NEAT|ARRIENDO", "planilla": "casa", "concepto": "Casa", "item": "Arriendo"}, {"patron": "SODIMAC|EASY|HOME DEPOT|IMPERIAL", "planilla": "casa", "concepto": "Casa", "item": "Compras Casa"}, {"patron": "AGUAS CORDI|AGUAS ANDINAS", "planilla": "casa", "concepto": "Casa", "item": "Agua"}, {"patron": "METROGAS|LIPIGAS|GASCO", "planilla": "casa", "concepto": "Casa", "item": "Gas"}, {"patron": "VTR|CLARO|ENTEL|MOVISTAR|MUNDO PACIFICO", "planilla": "casa", "concepto": "Casa", "item": "Internet"}, {"patron": "MOVIKIDS|NANA|ASISTENTE", "planilla": "casa", "concepto": "Casa", "item": "Nana"}, {"patron": "SPOTIFY", "planilla": "casa", "concepto": "Suscripciones", "item": "Spotify"}, {"patron": "NETFLIX", "planilla": "casa", "concepto": "Suscripciones", "item": "Netflix"}, {"patron": "ZAPPING", "planilla": "casa", "concepto": "Suscripciones", "item": "Zapping"}, {"patron": "APPLE.COM|APPLE INC", "planilla": "casa", "concepto": "Suscripciones", "item": "Apple"}, {"patron": "MASTER ROD|MASTEROD", "planilla": "personal", "concepto": "Comida", "item": "Master Rod"}, {"patron": "RAPPI|PEDIDOS YA|UBER EATS|IFOOD", "planilla": "personal", "concepto": "Comida Afuera", "item": "Delivery"}, {"patron": "FARMACIA|CRUZ VERDE|AHUMADA|SALCO|DR\\.", "planilla": "personal", "concepto": "Salud", "item": "Farmacia"}, {"patron": "CLINICA|HOSPITAL|MEDICO|CESFAM|IST ", "planilla": "personal", "concepto": "Salud", "item": "Doctor"}, {"patron": "FINTUAL", "planilla": "personal", "concepto": "Inversiones", "item": "Fintual"}, {"patron": "TOESCA(?!.*ADMINIST)", "planilla": "personal", "concepto": "Inversiones", "item": "Toesca"}, {"patron": "RACIONAL|VECTOR", "planilla": "personal", "concepto": "Inversiones", "item": "Racional"}, {"patron": "SECURITY|VALORES SECURITY", "planilla": "personal", "concepto": "Inversiones", "item": "Security"}, {"patron": "CAPITARIA", "planilla": "personal", "concepto": "Inversiones", "item": "Capitaria"}, {"patron": "BUDACOM", "planilla": "personal", "concepto": "Inversiones", "item": "Budacom"}, {"patron": "PUPPIES|PETCO|PETSHOP|ROYAL CANIN|AGROSUP", "planilla": "personal", "concepto": "Perros", "item": null}, {"patron": "PICHI|CABANA|HOSTAL.*PICHI", "planilla": "personal", "concepto": "Pichilemu", "item": null}, {"patron": "TRANSF.*TARJETA|PAGO.*TARJETA|PAGO.*TC|PAGO.*CMR|PAGO.*FALABELLA", "planilla": null, "concepto": "transferencia_interna", "item": null}, {"patron": "TRANSF.*SEBASTIAN.*LINDERMAN|TRANSF.*S.*LINDERMAN", "planilla": null, "concepto": "transferencia_interna", "item": null}];
 
 // ── HELPERS ───────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -1140,6 +1158,13 @@ let expandedConcepts={};
 // ── HEATMAP por fila ──────────────────────────────────────────
 // Escala de color dentro de cada fila (compara meses entre sí para ese concepto).
 let heatRows={};
+// Secciones del P&L colapsadas (solo muestran su total). Por default abiertas.
+let pnlColapsado={};
+function togPnlSec(key){
+  pnlColapsado[key]=!pnlColapsado[key];
+  if(key.startsWith('casa_')){ if($('sec-pnl-casa')?.classList.contains('open')) renderPnlCasa(); }
+  else { if($('sec-pnl')?.classList.contains('open')) renderPnl(); }
+}
 function togHeat(key,isCasa){
   heatRows[key]=!heatRows[key];
   if(isCasa) renderPnlCasa(); else renderPnl();
@@ -1283,22 +1308,64 @@ function addMoveButtons(tblId){
 
 // ── CARDS ─────────────────────────────────────────────────────────
 function renderCards(){
-  if(planilla==='casa'){renderCardsCasa();return;}
-  const p=D.pnl[mes]||{};
-  const gopMes=Object.values(D.gastos_op[mes]||{}).reduce((s,v)=>s+v,0);
-  const extraMes=Object.values(D.extras[mes]||{}).reduce((s,v)=>s+v,0);
-  const sueldo=p.sueldo||0,bono=p.bono||0,otrosIng=p.otros_ing||0;
-  const netoInvCard=(p.inv_rescates||0)-(p.inv_aportes||0);
-  const netoDep=['2201','1902','2103'].reduce((s,d)=>{const pt=PART[d]||1;return s+((p.arriendos?.[d]||0)-(p.hipotecarios?.[d]||0))*pt;},0)-(p.gastos_admin||0);
-  const gp=Object.values(D.gastos_op[prevM(mes)]||{}).reduce((s,v)=>s+v,0);
-  const pct=gp?((gopMes-gp)/gp*100):0;
-  const delt=pct?`<span style="color:${pct>0?'var(--red)':'var(--green)'}">${pct>0?'↑':'↓'}${Math.abs(pct).toFixed(0)}% vs ant.</span>`:'';
-  const bal=sueldo+bono+otrosIng+netoDep-gopMes-extraMes+netoInvCard;
+  if(planilla==='casa'){ if($('snap-controls'))$('snap-controls').style.display='none'; renderCardsCasa();return; }
+  if($('snap-controls'))$('snap-controls').style.display='flex';
+  const win=parseInt($('snap-win')?.value||'3');
+  const allM=D.meses_all||[];
+
+  // Helpers de agregación por mes
+  const gopDe=m=>Object.values(D.gastos_op[m]||{}).reduce((s,v)=>s+v,0);
+  const extDe=m=>Object.values(D.extras[m]||{}).reduce((s,v)=>s+v,0);
+  const depDe=m=>{const p=D.pnl[m]||{};return ['2201','1902','2103'].reduce((s,d)=>{const pt=PART[d]||1;return s+((p.arriendos?.[d]||0)-(p.hipotecarios?.[d]||0))*pt;},0)-(p.gastos_admin||0);};
+  const ingDe=m=>{const p=D.pnl[m]||{};return (p.sueldo||0)+(p.bono||0)+(p.otros_ing||0);};
+  const invDe=m=>(D.pnl[m]?.inv_aportes||0);                       // aportes (plata que sale)
+  const resultDe=m=>ingDe(m)+depDe(m)-gopDe(m)-extDe(m)+((D.pnl[m]?.inv_rescates||0)-(D.pnl[m]?.inv_aportes||0));
+
+  if(win===1){
+    // Modo mes único (comportamiento clásico)
+    const p=D.pnl[mes]||{};
+    const gopMes=gopDe(mes), extraMes=extDe(mes);
+    const netoDep=depDe(mes), ingMes=ingDe(mes);
+    const gp=gopDe(prevM(mes));
+    const pct=gp?((gopMes-gp)/gp*100):0;
+    const delt=pct?`<span style="color:${pct>0?'var(--red)':'var(--green)'}">${pct>0?'↑':'↓'}${Math.abs(pct).toFixed(0)}% vs ant.</span>`:'';
+    const res=resultDe(mes);
+    $('cards').innerHTML=
+      crd('var(--red)','Gastos Op.',gopMes,'vr',extraMes>0?'+ '+fk(extraMes)+' extraord.':'sin extraordinarios',delt)+
+      crd('var(--green)','Ingresos',ingMes,'vg','sueldo + bono + otros','')+
+      crd('var(--blue)','Aporte inversión',invDe(mes),'vb','a fondos este mes','')+
+      crd(res>=0?'var(--green)':'var(--red)','Resultado',res,res>=0?'vg':'vr','ingresos − gastos ± inv','');
+    return;
+  }
+
+  // Modo ventana móvil: promedio U_win meses vs win previos
+  const rec=allM.slice(-win), prev=allM.slice(-win*2,-win);
+  const prom=(arr,fn)=>arr.length?arr.reduce((s,m)=>s+fn(m),0)/arr.length:0;
+  const sumf=(arr,fn)=>arr.reduce((s,m)=>s+fn(m),0);
+
+  const gopR=prom(rec,gopDe), gopP=prom(prev,gopDe);
+  const ingR=prom(rec,ingDe);
+  const invR=sumf(rec,invDe);                 // aportes: total del período, no promedio
+  const resR=prom(rec,resultDe), resP=prom(prev,resultDe);
+
+  const deltaPct=(r,p)=>{
+    if(!prev.length||!p) return '';
+    const pc=(r-p)/Math.abs(p)*100;
+    // Para gastos: subir es malo (rojo). Para resultado: subir es bueno (verde).
+    return pc;
+  };
+  const badge=(pc,subeEsMalo)=>{
+    if(pc==='') return '';
+    const malo = subeEsMalo ? pc>0 : pc<0;
+    return `<span style="color:${malo?'var(--red)':'var(--green)'}">${pc>0?'↑':'↓'}${Math.abs(pc).toFixed(0)}% vs 3m previos</span>`;
+  };
+
+  const winLbl='prom. últimos '+win+'m';
   $('cards').innerHTML=
-    crd('var(--red)','Gastos Op.',gopMes,'vr',extraMes>0?'+ '+fk(extraMes)+' extraord.':'sin extraordinarios',delt)+
-    crd('var(--green)','Ingresos',sueldo+bono+otrosIng,'vg',bono?fk(sueldo)+' sueldo + '+fk(bono)+' bono':'sueldo mensual','')+
-    crd(netoDep>=0?'var(--teal)':'var(--amber)','Deptos (neto)',netoDep,netoDep>=0?'vt':'va','2201×100% + 1902/2103×50%','')+
-    crd(bal>=0?'var(--green)':'var(--red)','Balance',bal,bal>=0?'vg':'vr','ingresos + deptos − gastos','');
+    crd('var(--red)','Gastos Op.',gopR,'vr',winLbl,badge(deltaPct(gopR,gopP),true))+
+    crd('var(--green)','Ingresos',ingR,'vg',winLbl,'')+
+    crd('var(--blue)','Aportes inversión',invR,'vb','total últimos '+win+'m','')+
+    crd(resR>=0?'var(--green)':'var(--red)','Resultado',resR,resR>=0?'vg':'vr',winLbl,badge(deltaPct(resR,resP),false));
 }
 function renderCardsCasa(){
   const d=D.cm[mes]||{},dp=D.cm[prevM(mes)]||{};
@@ -1491,7 +1558,14 @@ function renderPnl(){
       });
     }
   }
-  function sec(lbl){h+=`<tr class="tr-s"><td colspan="${M.length+2}">${lbl}</td></tr>`;}
+  function sec(lbl,secKey){
+    if(!secKey){h+=`<tr class="tr-s"><td colspan="${M.length+2}">${lbl}</td></tr>`;return;}
+    const col=!!pnlColapsado[secKey];
+    const ic=col?'▶':'▼';
+    h+=`<tr class="tr-s"><td colspan="${M.length+2}" style="cursor:pointer" onclick="togPnlSec('${secKey}')"><span style="display:inline-block;width:14px;color:var(--text3)">${ic}</span>${lbl}</td></tr>`;
+  }
+  // Helper: ¿está colapsada esta sección? (para saltar filas de detalle)
+  function secCol(k){return !!pnlColapsado[k];}
 
   // ── Ingresos ──
   // Función dedicada: las filas SIEMPRE se dibujan, tengan datos o no.
@@ -1512,41 +1586,49 @@ function renderPnl(){
     }
     h += '<td class="neu" style="font-size:11px;white-space:nowrap">' + (av ? fclp(av) : '—') + heatBtn(_hk,false) + '</td></tr>';
   }
-  sec('Ingresos');
-  rowIng('Sueldo',        'sueldo',    M.map(m => D.pnl[m]?.sueldo    || 0));
-  rowIng('Bono / Otros',  'bono_otro', M.map(m => D.pnl[m]?.bono      || 0));
-  rowIng('Otros ingresos','otros_ing', M.map(m => D.pnl[m]?.otros_ing || 0));
+  sec('Ingresos','ing');
+  if(!secCol('ing')){
+    rowIng('Sueldo',        'sueldo',    M.map(m => D.pnl[m]?.sueldo    || 0));
+    rowIng('Bono / Otros',  'bono_otro', M.map(m => D.pnl[m]?.bono      || 0));
+    rowIng('Otros ingresos','otros_ing', M.map(m => D.pnl[m]?.otros_ing || 0));
+  }
   row('Total',M.map(m=>((D.pnl[m]?.sueldo||0)+(D.pnl[m]?.bono||0)+(D.pnl[m]?.otros_ing||0))||null),'pos',false,true,null,null);
 
   // Gastos op — orden personalizado, Otros siempre al final, sin duplicados
-  sec('Gastos operacionales');
-  const allCats=new Set();
-  M.forEach(m=>Object.keys(D.gastos_op[m]||{}).forEach(c=>allCats.add(c)));
-  const orden=getPnlOrden('personal').filter(c=>allCats.has(c)&&c!=='Otros');
-  const resto=[...allCats].filter(c=>!orden.includes(c)&&c!=='Otros');
-  const tieneOtros=[...allCats].includes('Otros');
-  [...orden,...resto,...(tieneOtros?['Otros']:[])].forEach(c=>{
-    row(c,M.map(m=>D.gastos_op[m]?.[c]?-(D.gastos_op[m][c]):null),'neg',true,false,c,'personal');
-  });
+  sec('Gastos operacionales','gop');
+  if(!secCol('gop')){
+    const allCats=new Set();
+    M.forEach(m=>Object.keys(D.gastos_op[m]||{}).forEach(c=>allCats.add(c)));
+    const orden=getPnlOrden('personal').filter(c=>allCats.has(c)&&c!=='Otros');
+    const resto=[...allCats].filter(c=>!orden.includes(c)&&c!=='Otros');
+    const tieneOtros=[...allCats].includes('Otros');
+    [...orden,...resto,...(tieneOtros?['Otros']:[])].forEach(c=>{
+      row(c,M.map(m=>D.gastos_op[m]?.[c]?-(D.gastos_op[m][c]):null),'neg',true,false,c,'personal');
+    });
+  }
   row('Total',M.map(m=>-Object.values(D.gastos_op[m]||{}).reduce((s,v)=>s+v,0)||null),'neg',false,true,null,null);
 
   // Extraordinarios
   const anyEx=M.some(m=>Object.values(D.extras[m]||{}).reduce((s,v)=>s+v,0)>0);
   if(anyEx){
-    sec('Extraordinarios');
-    const ec=new Set();M.forEach(m=>Object.keys(D.extras[m]||{}).forEach(c=>ec.add(c)));
-    [...ec].filter(c=>c!=='Otros').forEach(c=>row(c,M.map(m=>D.extras[m]?.[c]?-D.extras[m][c]:null),'warn',true,false,null,null));
-    if([...ec].includes('Otros'))row('Otros',M.map(m=>D.extras[m]?.Otros?-D.extras[m].Otros:null),'warn',true,false,null,null);
+    sec('Extraordinarios','extr');
+    if(!secCol('extr')){
+      const ec=new Set();M.forEach(m=>Object.keys(D.extras[m]||{}).forEach(c=>ec.add(c)));
+      [...ec].filter(c=>c!=='Otros').forEach(c=>row(c,M.map(m=>D.extras[m]?.[c]?-D.extras[m][c]:null),'warn',true,false,null,null));
+      if([...ec].includes('Otros'))row('Otros',M.map(m=>D.extras[m]?.Otros?-D.extras[m].Otros:null),'warn',true,false,null,null);
+    }
     row('Total',M.map(m=>-Object.values(D.extras[m]||{}).reduce((s,v)=>s+v,0)||null),'warn',false,true,null,null);
   }
 
   // Deptos
-  sec('Departamentos (proporcional)');
-  ['2201','1902','2103'].forEach(d=>{
-    const pt=PART[d]||1;
-    row('Depto '+d+' arriendo ('+pt*100+'%)',M.map(m=>(D.pnl[m]?.arriendos?.[d]||0)*pt||null),'pos',true,false,null,null,'arriendo_'+d);
-    row('Depto '+d+' hipotecario',M.map(m=>(D.pnl[m]?.hipotecarios?.[d]||0)*pt?-((D.pnl[m]?.hipotecarios?.[d]||0)*pt):null),'neg',true,false,null,null);
-  });
+  sec('Departamentos (proporcional)','dep');
+  if(!secCol('dep')){
+    ['2201','1902','2103'].forEach(d=>{
+      const pt=PART[d]||1;
+      row('Depto '+d+' arriendo ('+pt*100+'%)',M.map(m=>(D.pnl[m]?.arriendos?.[d]||0)*pt||null),'pos',true,false,null,null,'arriendo_'+d);
+      row('Depto '+d+' hipotecario',M.map(m=>(D.pnl[m]?.hipotecarios?.[d]||0)*pt?-((D.pnl[m]?.hipotecarios?.[d]||0)*pt):null),'neg',true,false,null,null);
+    });
+  }
   const nd=M.map(m=>{const p=D.pnl[m]||{};return ['2201','1902','2103'].reduce((s,d)=>{const pt=PART[d]||1;return s+((p.arriendos?.[d]||0)-(p.hipotecarios?.[d]||0))*pt;},0)-(p.gastos_admin||0)||null;});
   row('Neto deptos',nd,'',false,true,null,null);
 
@@ -1661,30 +1743,42 @@ function renderPnlCasa(){
       });
     }
   }
-  function sec(lbl){h+=`<tr class="tr-s"><td colspan="${M.length+2}">${lbl}</td></tr>`;}
+  function sec(lbl,secKey){
+    if(!secKey){h+=`<tr class="tr-s"><td colspan="${M.length+2}">${lbl}</td></tr>`;return;}
+    const col=!!pnlColapsado['casa_'+secKey];
+    const ic=col?'▶':'▼';
+    h+=`<tr class="tr-s"><td colspan="${M.length+2}" style="cursor:pointer" onclick="togPnlSec('casa_${secKey}')"><span style="display:inline-block;width:14px;color:var(--text3)">${ic}</span>${lbl}</td></tr>`;
+  }
+  function secCol(k){return !!pnlColapsado['casa_'+k];}
 
   // Ingresos
-  sec('Ingresos');
-  row('Seba',M.map(m=>D.pnl_casa[m]?.seba||null),'pos',true,false,null,'Seba');
-  row('Bea',M.map(m=>D.pnl_casa[m]?.bea||null),'pos',true,false,null,'Bea');
+  sec('Ingresos','ing');
+  if(!secCol('ing')){
+    row('Seba',M.map(m=>D.pnl_casa[m]?.seba||null),'pos',true,false,null,'Seba');
+    row('Bea',M.map(m=>D.pnl_casa[m]?.bea||null),'pos',true,false,null,'Bea');
+  }
   row('Total',M.map(m=>D.pnl_casa[m]?.total_aportes||null),'pos',false,true,null);
 
   // Gastos sin ocio
-  sec('Gastos sin ocio');
-  const sinOcio=new Set();M.forEach(m=>Object.keys(D.pnl_casa[m]?.gastos_sin_ocio||{}).forEach(c=>sinOcio.add(c)));
-  const ordenSin=getPnlOrden('casa').filter(c=>sinOcio.has(c)&&c!=='Otros');
-  const restoSin=[...sinOcio].filter(c=>!ordenSin.includes(c)&&c!=='Otros');
-  const tieneOtrosSin=sinOcio.has('Otros');
-  [...ordenSin,...restoSin,...(tieneOtrosSin?['Otros']:[])].forEach(c=>{
-    row(c,M.map(m=>D.pnl_casa[m]?.gastos_sin_ocio[c]?-(D.pnl_casa[m].gastos_sin_ocio[c]):null),'neg',true,false,c);
-  });
+  sec('Gastos sin ocio','sinocio');
+  if(!secCol('sinocio')){
+    const sinOcio=new Set();M.forEach(m=>Object.keys(D.pnl_casa[m]?.gastos_sin_ocio||{}).forEach(c=>sinOcio.add(c)));
+    const ordenSin=getPnlOrden('casa').filter(c=>sinOcio.has(c)&&c!=='Otros');
+    const restoSin=[...sinOcio].filter(c=>!ordenSin.includes(c)&&c!=='Otros');
+    const tieneOtrosSin=sinOcio.has('Otros');
+    [...ordenSin,...restoSin,...(tieneOtrosSin?['Otros']:[])].forEach(c=>{
+      row(c,M.map(m=>D.pnl_casa[m]?.gastos_sin_ocio[c]?-(D.pnl_casa[m].gastos_sin_ocio[c]):null),'neg',true,false,c);
+    });
+  }
   row('Subtotal',M.map(m=>D.pnl_casa[m]?.total_sin_ocio?-(D.pnl_casa[m].total_sin_ocio):null),'neg',false,true,null);
 
   // Gastos ocio
-  sec('Gastos ocio');
-  const ocio=new Set();M.forEach(m=>Object.keys(D.pnl_casa[m]?.gastos_ocio||{}).forEach(c=>ocio.add(c)));
-  [...ocio].filter(c=>c!=='Otros').forEach(c=>row(c,M.map(m=>D.pnl_casa[m]?.gastos_ocio[c]?-(D.pnl_casa[m].gastos_ocio[c]):null),'warn',true,false,c));
-  if(ocio.has('Otros'))row('Otros',M.map(m=>D.pnl_casa[m]?.gastos_ocio?.Otros?-(D.pnl_casa[m].gastos_ocio.Otros):null),'warn',true,false,'Otros');
+  sec('Gastos ocio','ocio');
+  if(!secCol('ocio')){
+    const ocio=new Set();M.forEach(m=>Object.keys(D.pnl_casa[m]?.gastos_ocio||{}).forEach(c=>ocio.add(c)));
+    [...ocio].filter(c=>c!=='Otros').forEach(c=>row(c,M.map(m=>D.pnl_casa[m]?.gastos_ocio[c]?-(D.pnl_casa[m].gastos_ocio[c]):null),'warn',true,false,c));
+    if(ocio.has('Otros'))row('Otros',M.map(m=>D.pnl_casa[m]?.gastos_ocio?.Otros?-(D.pnl_casa[m].gastos_ocio.Otros):null),'warn',true,false,'Otros');
+  }
   row('Subtotal',M.map(m=>D.pnl_casa[m]?.total_ocio?-(D.pnl_casa[m].total_ocio):null),'warn',false,true,null);
 
   // Balance
