@@ -236,7 +236,7 @@ tr:hover .move-btns { opacity:1; }
 <body>
 <script>if(localStorage.getItem('gastos_tema')==='light')document.body.classList.add('light');</script>
 <div class="topbar">
-  <div class="logo" title="v20260724-1948">gastos<em>_</em>app</div>
+  <div class="logo" title="v20260820-1414">gastos<em>_</em>app</div>
   <div class="tabs-top">
     <button class="ttab on" onclick="swP('personal',this)">Personal</button>
     <button class="ttab" onclick="swP('casa',this)">Casa</button>
@@ -3256,7 +3256,12 @@ function abrirModalBatch() {
 function confirmarBatch() {
   const medio = $('batch-medio').value;
   const pagadoPor = $('batch-pagado').value;
-  const planDef = window._batchPlanDef || 'auto';
+  const banco = (window._batchFuente||{}).banco || 'auto';
+  console.log('[confirmarBatch] banco=', banco, '| _batchFuente=', JSON.stringify(window._batchFuente), '| esFamilia=', banco==='santander-cc-familia');
+  // La cuenta familiar: TODO gasto de este batch es de Casa, pagado por Familia
+  // y ya saldado (nadie le debe a nadie, la familia lo cubrió directo).
+  const esCuentaFamilia = banco === 'santander-cc-familia';
+  const planDef = esCuentaFamilia ? 'casa' : (window._batchPlanDef || 'auto');
   const movs = window._batchMovsPending || [];
   $('modal-batch').classList.remove('show');
   for(const mov of movs) {
@@ -3264,10 +3269,15 @@ function confirmarBatch() {
     // determine correctamente ingreso vs gasto. mov.monto siempre es positivo (solo display).
     const clas = clasificar(mov.descripcion, mov.monto_original, planDef);
     const p = crearPendiente(mov, clas);
-    p.medio_pago = medio || null;
-    // Pagado por del modal aplica solo a gastos de Casa (quién fronteó el gasto).
-    // Los ingresos/aportes de Casa mantienen la detección automática por nombre de crearPendiente.
-    if(p.planilla === 'casa' && p.tipo !== 'ingreso') {
+    p.medio_pago = medio || (esCuentaFamilia ? 'CC Familia' : null);
+    if(esCuentaFamilia && p.tipo !== 'ingreso') {
+      // Forzar Casa / Familia / Saldado para gastos de la cuenta familiar
+      p.planilla = 'casa';
+      p.pagado_por = 'Familia';
+      p.reembolsado = 1;
+    } else if(p.planilla === 'casa' && p.tipo !== 'ingreso') {
+      // Pagado por del modal aplica solo a gastos de Casa (quién fronteó el gasto).
+      // Los ingresos/aportes de Casa mantienen la detección automática por nombre.
       p.pagado_por = pagadoPor;
       p.reembolsado = pagadoPor === 'Familia' ? 1 : 0;
     }
@@ -3275,8 +3285,8 @@ function confirmarBatch() {
   }
   window._batchCargaMeta = {
     fuente: (window._batchFuente||{}).fuente || 'texto',
-    banco: (window._batchFuente||{}).banco || 'auto',
-    planilla: planDef
+    banco: banco,
+    planilla: esCuentaFamilia ? 'casa' : planDef
   };
   window._batchMovsPending = [];
   renderPendientes();
