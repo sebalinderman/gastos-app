@@ -236,7 +236,7 @@ tr:hover .move-btns { opacity:1; }
 <body>
 <script>if(localStorage.getItem('gastos_tema')==='light')document.body.classList.add('light');</script>
 <div class="topbar">
-  <div class="logo" title="v20260820-1414">gastos<em>_</em>app</div>
+  <div class="logo" title="v20260820-1432">gastos<em>_</em>app</div>
   <div class="tabs-top">
     <button class="ttab on" onclick="swP('personal',this)">Personal</button>
     <button class="ttab" onclick="swP('casa',this)">Casa</button>
@@ -359,6 +359,27 @@ tr:hover .move-btns { opacity:1; }
   </div>
 
   <div class="sec">
+    <div class="sec-head" onclick="togS('presup')">
+      <div><div class="sec-title">Presupuesto</div><div class="sec-meta" id="meta-presup"></div></div>
+      <span class="sec-toggle" id="tog-presup">▶</span>
+    </div>
+    <div class="sec-body" id="sec-presup">
+      <div style="padding:14px 18px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+          <span style="font-size:11px;color:var(--text2)">Comparar contra:</span>
+          <select class="ctl" id="presup-modo" onchange="renderPresup('personal')" style="font-size:12px">
+            <option value="mes" selected>Mes seleccionado</option>
+            <option value="prom3">Promedio últimos 3m</option>
+            <option value="prom6">Promedio últimos 6m</option>
+          </select>
+          <span style="font-size:11px;color:var(--text3)">Editá los montos y quedan guardados.</span>
+        </div>
+        <div style="overflow-x:auto"><table id="tbl-presup" style="width:100%;border-collapse:collapse;font-size:12px"></table></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
     <div class="sec-head" onclick="togS('pnl')">
       <span class="sec-title">P&amp;L Personal</span>
       <span class="sec-toggle" id="tog-pnl">▶</span>
@@ -407,13 +428,30 @@ tr:hover .move-btns { opacity:1; }
             <table id="cxp-medios" style="width:100%;border-collapse:collapse;font-size:12px"></table>
           </div>
         </div>
-        <div style="font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:8px">
-          Gastos pendientes de saldar
+        <!-- Pendientes por persona y mes -->
+        <div style="margin-bottom:18px">
+          <div style="font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:8px">
+            Pendientes de saldar por mes
+          </div>
+          <div style="overflow-x:auto">
+            <table id="cxp-pend-mes" style="width:100%;border-collapse:collapse;font-size:12px"></table>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px">
+          <div style="font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--text3)">
+            Gastos pendientes de saldar
+          </div>
+          <div id="cxp-sel-bar" style="display:none;align-items:center;gap:10px">
+            <span style="font-size:12px;color:var(--text2)">Seleccionados: <strong id="cxp-sel-n">0</strong> · <span id="cxp-sel-monto" style="font-family:var(--mono);color:var(--red)">$0</span></span>
+            <button onclick="saldarSeleccionados()" style="font-size:11px;padding:4px 12px;border-radius:5px;border:none;background:var(--green);color:#fff;cursor:pointer;font-weight:500">✓ Saldar seleccionados</button>
+            <button onclick="limpiarSeleccionCxP()" style="font-size:11px;padding:4px 10px;border-radius:5px;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);cursor:pointer">Limpiar</button>
+          </div>
         </div>
         <div style="overflow-x:auto">
         <table style="width:100%;border-collapse:collapse;font-size:12px">
           <thead>
             <tr style="color:var(--text3);font-family:var(--mono);font-size:10px;text-transform:uppercase;border-bottom:1px solid var(--border)">
+              <th style="padding:4px 8px;text-align:center;font-weight:400;width:30px"><input type="checkbox" id="cxp-check-all" onclick="toggleTodosCxP(this)" title="Seleccionar todos"></th>
               <th style="padding:4px 8px;text-align:left;font-weight:400">Fecha</th>
               <th style="padding:4px 8px;text-align:left;font-weight:400">Descripción</th>
               <th style="padding:4px 8px;text-align:left;font-weight:400">Concepto</th>
@@ -461,6 +499,27 @@ tr:hover .move-btns { opacity:1; }
     </div>
     <div class="sec-body" id="sec-aportes-casa">
       <div class="chart-area"><div class="chart-wrap" style="height:240px"><canvas id="c-aportes-casa"></canvas></div></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-head" onclick="togSC('presup-casa')">
+      <div><div class="sec-title">Presupuesto</div><div class="sec-meta" id="meta-presup-casa"></div></div>
+      <span class="sec-toggle" id="tog-presup-casa">▶</span>
+    </div>
+    <div class="sec-body" id="sec-presup-casa">
+      <div style="padding:14px 18px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+          <span style="font-size:11px;color:var(--text2)">Comparar contra:</span>
+          <select class="ctl" id="presup-modo-casa" onchange="renderPresup('casa')" style="font-size:12px">
+            <option value="mes" selected>Mes seleccionado</option>
+            <option value="prom3">Promedio últimos 3m</option>
+            <option value="prom6">Promedio últimos 6m</option>
+          </select>
+          <span style="font-size:11px;color:var(--text3)">Editá los montos y quedan guardados.</span>
+        </div>
+        <div style="overflow-x:auto"><table id="tbl-presup-casa" style="width:100%;border-collapse:collapse;font-size:12px"></table></div>
+      </div>
     </div>
   </div>
 
@@ -1186,6 +1245,21 @@ function heatBtn(key,isCasa){
   return '<button class="heat-btn'+(on?' on':'')+'" onclick="event.stopPropagation();togHeat(\''+key+'\','+(isCasa?'true':'false')+')" title="'+(on?'Quitar':'Ver')+' escala de color por mes">▦</button>';
 }
 let pnlOrden={'personal':null,'casa':null};
+// ── PRESUPUESTOS por concepto ─────────────────────────────────────
+// Estructura: { personal:{Comida:300000,...}, casa:{Casa:2500000,...} }
+// Persisten en localStorage (config, no dato financiero). Editables cuando sea.
+let presupuestos=(function(){
+  try{return JSON.parse(localStorage.getItem('gastos_presupuestos')||'{}');}catch{return {};}
+})();
+if(!presupuestos.personal)presupuestos.personal={};
+if(!presupuestos.casa)presupuestos.casa={};
+function getPresupuesto(pl,concepto){ return (presupuestos[pl]||{})[concepto]||0; }
+function setPresupuesto(pl,concepto,monto){
+  if(!presupuestos[pl])presupuestos[pl]={};
+  if(monto>0) presupuestos[pl][concepto]=monto;
+  else delete presupuestos[pl][concepto];
+  localStorage.setItem('gastos_presupuestos',JSON.stringify(presupuestos));
+}
 let itemsOrden={};
 let pendientes=[], gestPlanilla='personal', gestConcepto=null, gestItem=null;
 // ── COLA PENDIENTES EN SUPABASE ───────────────────────────────────
@@ -1388,6 +1462,122 @@ function crd(acc,lbl,val,vcls,sub,dlt){
 }
 
 // ── P&L PERSONAL ──────────────────────────────────────────────────
+
+// ── PRESUPUESTO ───────────────────────────────────────────────────────────────
+// Compara el presupuesto definido por concepto contra el gasto real.
+// Modo 'mes' usa el mes seleccionado; 'prom3'/'prom6' el promedio de la ventana.
+function gastoConceptoMes(pl,concepto,m){
+  if(pl==='personal') return D.gastos_op[m]?.[concepto]||0;
+  const g=D.pnl_casa[m]; if(!g) return 0;
+  return (g.gastos_sin_ocio?.[concepto]||0)+(g.gastos_ocio?.[concepto]||0);
+}
+function renderPresup(pl){
+  const isC = pl==='casa';
+  const tbl=$(isC?'tbl-presup-casa':'tbl-presup');
+  if(!tbl) return;
+  const modo=$(isC?'presup-modo-casa':'presup-modo')?.value||'mes';
+  const allM=(isC?(D.meses_all_casa||[]):(D.meses_all||[]));
+
+  // Gasto real según modo
+  let gastoDe, refLbl;
+  if(modo==='mes'){
+    const m=mes; // mes global seleccionado
+    gastoDe=(c)=>gastoConceptoMes(pl,c,m);
+    refLbl='gasto de '+mlbl(m);
+  } else {
+    const win=modo==='prom6'?6:3;
+    const ventana=allM.slice(-win);
+    gastoDe=(c)=>ventana.length?ventana.reduce((s,m)=>s+gastoConceptoMes(pl,c,m),0)/ventana.length:0;
+    refLbl='promedio últimos '+win+'m';
+  }
+
+  // Universo de conceptos: los que tienen presupuesto + los que tienen gasto
+  const conPresup=Object.keys(presupuestos[pl]||{});
+  const conGasto=new Set();
+  allM.forEach(m=>{
+    if(pl==='personal') Object.keys(D.gastos_op[m]||{}).forEach(c=>conGasto.add(c));
+    else { Object.keys(D.pnl_casa[m]?.gastos_sin_ocio||{}).forEach(c=>conGasto.add(c));
+           Object.keys(D.pnl_casa[m]?.gastos_ocio||{}).forEach(c=>conGasto.add(c)); }
+  });
+  const universo=[...new Set([...conPresup,...conGasto])];
+  // Orden: primero los del orden del P&L, luego el resto
+  const orden=getPnlOrden(pl);
+  universo.sort((a,b)=>{
+    const ia=orden.indexOf(a), ib=orden.indexOf(b);
+    if(ia!==-1&&ib!==-1) return ia-ib;
+    if(ia!==-1) return -1; if(ib!==-1) return 1;
+    return a.localeCompare(b,'es');
+  });
+
+  let totPres=0, totGasto=0;
+  let h='<thead><tr style="color:var(--text3);font-family:var(--mono);font-size:10px;text-transform:uppercase;border-bottom:1px solid var(--border)">';
+  h+='<th style="padding:5px 8px;text-align:left;font-weight:400">Concepto</th>';
+  h+='<th style="padding:5px 8px;text-align:right;font-weight:400">Presupuesto</th>';
+  h+='<th style="padding:5px 8px;text-align:right;font-weight:400;white-space:nowrap">'+refLbl+'</th>';
+  h+='<th style="padding:5px 8px;text-align:right;font-weight:400">Diferencia</th>';
+  h+='<th style="padding:5px 8px;text-align:left;font-weight:400;width:22%">Estado</th></tr></thead><tbody>';
+
+  universo.forEach(c=>{
+    const pres=getPresupuesto(pl,c);
+    const gasto=Math.round(gastoDe(c));
+    totPres+=pres; totGasto+=gasto;
+    const dif=pres-gasto; // positivo = bajo presupuesto (bien)
+    const pct=pres>0?(gasto/pres*100):(gasto>0?999:0);
+    // Semáforo: verde <85%, ámbar 85-100%, rojo >100%
+    let col,barCol;
+    if(!pres){ col='var(--text3)'; barCol='var(--border2)'; }
+    else if(pct>100){ col='var(--red)'; barCol='var(--red)'; }
+    else if(pct>=85){ col='var(--amber)'; barCol='var(--amber)'; }
+    else { col='var(--green)'; barCol='var(--green)'; }
+    const w=Math.min(100,Math.round(pct));
+
+    h+='<tr style="border-bottom:1px solid var(--border)">';
+    h+='<td style="padding:6px 8px;color:var(--text)">'+c+'</td>';
+    // Presupuesto editable
+    h+='<td style="padding:4px 8px;text-align:right">'+
+       '<input type="text" inputmode="numeric" value="'+(pres?pres.toLocaleString("es-CL"):"")+'" placeholder="—" '+
+       'data-pl="'+pl+'" data-c="'+c+'" class="presup-input" '+
+       'style="width:100px;text-align:right;font-family:var(--mono);font-size:12px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:3px 6px;color:var(--text)"></td>';
+    h+='<td style="padding:6px 8px;text-align:right;font-family:var(--mono);color:var(--text2)">'+(gasto?fabs(gasto):'—')+'</td>';
+    h+='<td style="padding:6px 8px;text-align:right;font-family:var(--mono);color:'+(pres?(dif>=0?'var(--green)':'var(--red)'):'var(--text3)')+'">'+
+       (pres?((dif>=0?'+':'-')+fabs(Math.abs(dif)).replace('$','$')):'—')+'</td>';
+    // Barra semáforo
+    h+='<td style="padding:6px 8px">'+
+       (pres?'<div style="display:flex;align-items:center;gap:6px"><div style="flex:1;background:var(--bg3);border-radius:3px;height:7px;overflow:hidden"><div style="height:100%;width:'+w+'%;background:'+barCol+'"></div></div><span style="font-size:10px;color:'+col+';font-family:var(--mono);white-space:nowrap">'+Math.round(pct)+'%</span></div>':'<span style="font-size:10px;color:var(--text3)">sin presupuesto</span>')+
+       '</td></tr>';
+  });
+
+  // Total
+  const difT=totPres-totGasto;
+  const pctT=totPres>0?(totGasto/totPres*100):0;
+  h+='<tr style="border-top:1px solid var(--border2);font-weight:500">';
+  h+='<td style="padding:7px 8px;color:var(--text)">Total</td>';
+  h+='<td style="padding:7px 8px;text-align:right;font-family:var(--mono);color:var(--text)">'+(totPres?fabs(totPres):'—')+'</td>';
+  h+='<td style="padding:7px 8px;text-align:right;font-family:var(--mono);color:var(--text)">'+(totGasto?fabs(totGasto):'—')+'</td>';
+  h+='<td style="padding:7px 8px;text-align:right;font-family:var(--mono);color:'+(totPres?(difT>=0?'var(--green)':'var(--red)'):'var(--text3)')+'">'+(totPres?((difT>=0?'+':'-')+fabs(Math.abs(difT)).replace('$','$')):'—')+'</td>';
+  h+='<td style="padding:7px 8px;font-size:10px;color:var(--text2);font-family:var(--mono)">'+(totPres?Math.round(pctT)+'% usado':'')+'</td></tr>';
+  h+='</tbody>';
+  tbl.innerHTML=h;
+
+  // Meta en el header de la sección
+  const metaEl=$(isC?'meta-presup-casa':'meta-presup');
+  if(metaEl){
+    if(totPres) metaEl.textContent=fabs(totGasto)+' de '+fabs(totPres)+' ('+Math.round(pctT)+'%) · '+refLbl;
+    else metaEl.textContent='Sin presupuestos definidos aún';
+  }
+
+  // Wire de edición: al perder foco o Enter, guardar
+  tbl.querySelectorAll('.presup-input').forEach(inp=>{
+    const commit=()=>{
+      const raw=inp.value.replace(/[^\d]/g,'');
+      const val=parseInt(raw)||0;
+      setPresupuesto(inp.dataset.pl,inp.dataset.c,val);
+      renderPresup(pl);
+    };
+    inp.onblur=commit;
+    inp.onkeydown=(e)=>{ if(e.key==='Enter'){ e.preventDefault(); inp.blur(); } };
+  });
+}
 
 // ── TENDENCIAS ────────────────────────────────────────────────────────────────
 // Compara el promedio mensual de los últimos N meses contra los N anteriores.
@@ -2569,6 +2759,7 @@ function togS(id){
     else if(id==='inv')renderInv();
     else if(id==='pnl')renderPnl();
     else if(id==='tend')renderTend();
+    else if(id==='presup')renderPresup('personal');
   }
 }
 function togSC(id){
@@ -2581,6 +2772,7 @@ function togSC(id){
     else if(id==='ocio-casa')renderOcioCasa();
     else if(id==='aportes-casa')renderAportesCasa();
     else if(id==='pnl-casa')renderPnlCasa();
+    else if(id==='presup-casa')renderPresup('casa');
   }
 }
 function swP(p,btn){
@@ -2608,11 +2800,13 @@ function upd(){
     if($('sec-inv').classList.contains('open'))renderInv();
     if($('sec-pnl').classList.contains('open'))renderPnl();
     if($('sec-tend')?.classList.contains('open'))renderTend();
+    if($('sec-presup')?.classList.contains('open'))renderPresup('personal');
   } else {
     renderGopCasa();
     if($('sec-ocio-casa').classList.contains('open'))renderOcioCasa();
     if($('sec-aportes-casa').classList.contains('open'))renderAportesCasa();
     if($('sec-pnl-casa').classList.contains('open'))renderPnlCasa();
+    if($('sec-presup-casa')?.classList.contains('open'))renderPresup('casa');
   }
 }
 function swSource(id, btn) {
@@ -3556,6 +3750,41 @@ function renderCxPMedios() {
     });
   };
 }
+let _cxpSel=new Set(); // ids seleccionados para saldar en lote
+function renderCxPPendMes(movs){
+  const tbl=$('cxp-pend-mes'); if(!tbl) return;
+  // Agrupar pendientes por mes y persona
+  const porMes={};
+  movs.forEach(h=>{
+    const k=(h.fecha||'').slice(0,7);
+    if(!k) return;
+    if(!porMes[k])porMes[k]={Seba:0,Bea:0};
+    porMes[k][h.pagado_por]=(porMes[k][h.pagado_por]||0)+(h.monto||0);
+  });
+  const meses=Object.keys(porMes).sort();
+  if(!meses.length){ tbl.innerHTML=''; return; }
+  let h='<thead><tr style="color:var(--text3);font-family:var(--mono);font-size:10px;text-transform:uppercase;border-bottom:1px solid var(--border)">';
+  h+='<th style="padding:4px 8px;text-align:left;font-weight:400">Mes</th>';
+  h+='<th style="padding:4px 8px;text-align:right;font-weight:400">Casa → Seba</th>';
+  h+='<th style="padding:4px 8px;text-align:right;font-weight:400">Casa → Bea</th>';
+  h+='<th style="padding:4px 8px;text-align:right;font-weight:400">Total mes</th></tr></thead><tbody>';
+  let tS=0,tB=0;
+  meses.forEach(m=>{
+    const s=porMes[m].Seba||0, b=porMes[m].Bea||0;
+    tS+=s; tB+=b;
+    h+='<tr style="border-bottom:1px solid var(--border)">';
+    h+='<td style="padding:5px 8px;color:var(--text);white-space:nowrap">'+mlbl(m)+'</td>';
+    h+='<td style="padding:5px 8px;text-align:right;font-family:var(--mono);color:'+(s?'var(--red)':'var(--text3)')+'">'+(s?fabs(s):'—')+'</td>';
+    h+='<td style="padding:5px 8px;text-align:right;font-family:var(--mono);color:'+(b?'var(--red)':'var(--text3)')+'">'+(b?fabs(b):'—')+'</td>';
+    h+='<td style="padding:5px 8px;text-align:right;font-family:var(--mono);color:var(--text2)">'+fabs(s+b)+'</td></tr>';
+  });
+  h+='<tr style="border-top:1px solid var(--border2);font-weight:500">';
+  h+='<td style="padding:6px 8px;color:var(--text)">Total</td>';
+  h+='<td style="padding:6px 8px;text-align:right;font-family:var(--mono);color:var(--red)">'+(tS?fabs(tS):'—')+'</td>';
+  h+='<td style="padding:6px 8px;text-align:right;font-family:var(--mono);color:var(--red)">'+(tB?fabs(tB):'—')+'</td>';
+  h+='<td style="padding:6px 8px;text-align:right;font-family:var(--mono);color:var(--red)">'+fabs(tS+tB)+'</td></tr></tbody>';
+  tbl.innerHTML=h;
+}
 function renderCxPDetalle() {
   renderCxPMedios();
   const tbody = $('cxp-detalle-body');
@@ -3563,12 +3792,20 @@ function renderCxPDetalle() {
   const movs = (D.hist||[])
     .filter(h=>h.planilla==='casa'&&h.tipo==='gasto'&&!esReembolsado(h.reembolsado)&&(h.pagado_por==='Seba'||h.pagado_por==='Bea'))
     .sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+  renderCxPPendMes(movs);
+  // Limpiar de la selección ids que ya no están pendientes
+  const idsActuales=new Set(movs.map(h=>String(h.id)));
+  _cxpSel.forEach(id=>{ if(!idsActuales.has(id)) _cxpSel.delete(id); });
   if(!movs.length) {
-    tbody.innerHTML = '<tr><td colspan="6" style="padding:12px 8px;color:var(--text3);text-align:center">Sin gastos pendientes de reembolso</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="padding:12px 8px;color:var(--text3);text-align:center">Sin gastos pendientes de reembolso</td></tr>';
+    actualizarBarraSelCxP();
     return;
   }
-  tbody.innerHTML = movs.map(h=>`
-    <tr style="border-bottom:1px solid var(--border);color:var(--text2)" onclick="event.stopPropagation()">
+  tbody.innerHTML = movs.map(h=>{
+    const sel=_cxpSel.has(String(h.id));
+    return `
+    <tr style="border-bottom:1px solid var(--border);color:var(--text2);${sel?'background:rgba(34,197,94,.06)':''}" onclick="event.stopPropagation()">
+      <td style="padding:6px 8px;text-align:center"><input type="checkbox" class="cxp-check" data-id="${h.id}" data-monto="${h.monto||0}" ${sel?'checked':''} onclick="toggleSelCxP('${h.id}',${h.monto||0},this.checked)"></td>
       <td style="padding:6px 8px">${h.fecha||'—'}</td>
       <td style="padding:6px 8px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h.concepto||''} ${h.item?'· '+h.item:''}</td>
       <td style="padding:6px 8px;color:var(--text3);font-size:11px">${h.comentario||''}</td>
@@ -3577,7 +3814,63 @@ function renderCxPDetalle() {
       <td style="padding:6px 8px;text-align:center">
         <button onclick="marcarReembolsado(${h.id})" style="font-size:10px;padding:3px 8px;border-radius:4px;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);cursor:pointer">✓ Saldado</button>
       </td>
-    </tr>`).join('');
+    </tr>`;}).join('');
+  actualizarBarraSelCxP();
+}
+function toggleSelCxP(id,monto,checked){
+  if(checked) _cxpSel.add(String(id)); else _cxpSel.delete(String(id));
+  actualizarBarraSelCxP();
+  // Actualizar fondo de la fila sin re-render completo
+  const cb=document.querySelector('.cxp-check[data-id="'+id+'"]');
+  if(cb){ const tr=cb.closest('tr'); if(tr) tr.style.background=checked?'rgba(34,197,94,.06)':''; }
+}
+function toggleTodosCxP(master){
+  document.querySelectorAll('.cxp-check').forEach(cb=>{
+    cb.checked=master.checked;
+    const id=cb.dataset.id;
+    if(master.checked) _cxpSel.add(String(id)); else _cxpSel.delete(String(id));
+    const tr=cb.closest('tr'); if(tr) tr.style.background=master.checked?'rgba(34,197,94,.06)':'';
+  });
+  actualizarBarraSelCxP();
+}
+function limpiarSeleccionCxP(){
+  _cxpSel.clear();
+  const ca=$('cxp-check-all'); if(ca) ca.checked=false;
+  document.querySelectorAll('.cxp-check').forEach(cb=>{cb.checked=false;const tr=cb.closest('tr');if(tr)tr.style.background='';});
+  actualizarBarraSelCxP();
+}
+function actualizarBarraSelCxP(){
+  const bar=$('cxp-sel-bar'); if(!bar) return;
+  const n=_cxpSel.size;
+  bar.style.display=n>0?'flex':'none';
+  if(n>0){
+    let suma=0;
+    document.querySelectorAll('.cxp-check').forEach(cb=>{ if(_cxpSel.has(String(cb.dataset.id))) suma+=parseFloat(cb.dataset.monto)||0; });
+    $('cxp-sel-n').textContent=n;
+    $('cxp-sel-monto').textContent=fabs(suma);
+  }
+}
+async function saldarSeleccionados(){
+  const ids=[..._cxpSel];
+  if(!ids.length) return;
+  let suma=0;
+  ids.forEach(id=>{ const h=D.hist.find(x=>String(x.id)===String(id)); if(h) suma+=h.monto||0; });
+  if(!confirm('¿Marcar como saldados '+ids.length+' movimientos por un total de '+fabs(suma)+'?')) return;
+  // Optimista: marcar en memoria y persistir uno por uno
+  for(const id of ids){
+    const h=D.hist.find(x=>String(x.id)===String(id));
+    if(!h) continue;
+    h.reembolsado=1;
+    try{
+      await fetch(SUPABASE_URL+'/rest/v1/movimientos?id=eq.'+id,{
+        method:'PATCH',
+        headers:{...sbH,'Content-Type':'application/json','Prefer':'return=minimal'},
+        body:JSON.stringify({reembolsado:'1'})
+      });
+    }catch(e){ console.error('Error saldando '+id+':',e); }
+  }
+  _cxpSel.clear();
+  actualizarCxP();
 }
 async function marcarReembolsado(id) {
   const h = D.hist.find(x=>x.id===id);
